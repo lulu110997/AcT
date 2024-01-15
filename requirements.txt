@@ -10,3 +10,4 @@ scipy==1.5.4
 tensorflow==2.6.0
 tensorflow_addons==0.14.0
 tensorflow_datasets==4.4.0
+keras ==2.6.0  # We get some error about dtensor https://stackoverflow.com/questions/72255562/cannot-import-name-dtensor-from-tensorflow-compat-v2-experimental
