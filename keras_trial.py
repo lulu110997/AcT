@@ -80,4 +80,5 @@ trans = TransformerEncoder(d_model, n_heads, d_ff, dropout, activation, n_layers
 model = build_act(trans)
 model.load_weights(config['WEIGHTS'])
 trainable_count = count_params(model.trainable_weights)
+print(model.summary())
 # print(trainable_count) 227156

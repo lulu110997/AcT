@@ -10,6 +10,54 @@ import torch
 import tensorflow as tf
 from pytorch_model_summary import summary
 
+
+class AcTorch(nn.Module):
+    def __init__(self, transformer_pt, de, d_model, num_frames, num_classes):
+        super(AcTorch, self).__init__()
+
+        self.num_classes = num_classes
+        self.T = num_frames
+        self.d_model = d_model
+        self.de = de
+
+        # Embedding block which projects the input to a higher dimension. In this case, the num_keypoints --> d_model
+        self.project_higher = nn.Linear(52, self.d_model)
+
+        # cls token to concatenate to the projected input
+        self.class_token = nn.Parameter(
+            torch.randn(1, 1, self.d_model), requires_grad=True
+        )  # self.class_embed = self.add_weight(shape=(1, 1, self.d_model),
+        # initializer=self.kernel_initializer, name="class_token")
+
+        # Learnable vectors to be added to the projected input
+        self.pos_embedding = torch.nn.Parameter(
+            torch.randn(1, self.T + 1, self.d_model), requires_grad=True
+        )  # tf.keras.layers.Embedding(input_dim=(self.n_tot_patches), output_dim=self.d_model)
+
+        # Initialise values of cls and pos emb
+        torch.nn.init.normal_(self.class_token, std=0.02)
+        torch.nn.init.normal_(self.pos_embedding, std=0.02)
+
+        # Transformer encoder
+        self.transformer = transformer_pt
+
+        # Final MLPs
+        self.fc1 = nn.Linear(64, 4*self.d_model)
+        self.fc2 = nn.Linear(4*self.d_model, self.num_classes)
+
+    def forward(self, x):
+        batch_sz = x.shape[0]
+        x = self.project_higher(x)
+        x = x.view(batch_sz, self.d_model, -1).permute(0, 2, 1)
+        x = torch.cat([self.class_token.expand(batch_sz, -1, -1), x], dim=1)
+        x += self.pos_embedding
+        x = self.transformer(x)
+        x = x[:, 0, :]
+        x = self.fc1(x)
+        x = self.fc2(x)
+        return x
+
+
 config = read_yaml("utils/config.yaml")
 
 # Constants
@@ -34,25 +82,6 @@ def count_parameters_pt(model):
     """
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-def build_act(transformer):
-    # Instantiate an input tensor
-    # inputs = torpytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)        config[config['DATASET']]['KEYPOINTS'] * config['CHANNELS'])
-    # inputs should have (1, 30, 52)
-    inputs = tf.keras.layers.Input(shape=(config[config['DATASET']]['FRAMES'] // config['SUBSAMPLE'],
-                                          config[config['DATASET']]['KEYPOINTS'] * config['CHANNELS']))
-
-    # Embedding step
-    x = tf.keras.layers.Dense(d_model)(inputs)
-    # x = nn.Linear(inputs, d_model)
-
-    # Tokenise the embedded input
-    x = PatchClassEmbedding(d_model, config[config['DATASET']]['FRAMES'] // config['SUBSAMPLE'],
-                            pos_emb=None)(x)
-    x = transformer(x)
-    x = tf.keras.layers.Lambda(lambda x: x[:, 0, :])(x)
-    x = tf.keras.layers.Dense(mlp_head_size)(x)
-    outputs = tf.keras.layers.Dense(config[config['DATASET']]['CLASSES'])(x)
-    return tf.keras.models.Model(inputs, outputs)
 
 # Check GPU
 if not torch.cuda.is_available():
@@ -64,17 +93,7 @@ encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=n_heads, dim_f
 trans_nn = nn.TransformerEncoder(encoder_layer, n_layers)
 inputs = torch.ones(1, config[config['DATASET']]['FRAMES'] // config['SUBSAMPLE'],
                         config[config['DATASET']]['KEYPOINTS'] * config['CHANNELS'])
-tmp = nn.Linear(inputs.shape[2]+1, d_model+1)
-# class_token = torch.nn.Parameter(
-#     torch.randn(1, 1, inputs[2]))
-# pos_embedding = torch.nn.Parameter(
-#     torch.randn(1, 31, inputs[2]))
-# torch.nn.init.normal_(class_token, std=0.02)
-# torch.nn.init.normal_(pos_embedding, std=0.02)
 
-print(summary(trans_nn, inputs, show_input=False))
-print(count_parameters_pt(trans_nn))
 
-print(x.shape)
-trans = TransformerEncoder(d_model, n_heads, d_ff, dropout, activation, n_layers)
-build_act(trans)
+my_model = AcTorch(trans_nn, 64, d_model, 30, 20)
+my_model(inputs)
