@@ -1,6 +1,8 @@
 # GENERAL LIBRARIES 
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import sys
+
 import absl.logging
 absl.logging.set_verbosity(absl.logging.ERROR)
 
@@ -107,11 +109,11 @@ class Trainer:
                                                               test_size=self.config['VAL_SIZE'],
                                                               random_state=self.config['SEEDS'][self.fold],
                                                               stratify=y_train)
-                
+
             self.ds_train = tf.data.Dataset.from_tensor_slices((X_train, y_train))
             self.ds_val = tf.data.Dataset.from_tensor_slices((X_val, y_val))
             self.ds_test = tf.data.Dataset.from_tensor_slices((X_test, y_test))
-            
+
         self.ds_train = self.ds_train.map(lambda x,y : one_hot(x,y,self.config[self.config['DATASET']]['CLASSES']), 
                                           num_parallel_calls=tf.data.experimental.AUTOTUNE)
         self.ds_train = self.ds_train.cache()
@@ -154,7 +156,7 @@ class Trainer:
     def do_training(self):
         self.get_data()
         self.get_model()
-
+        raise "No training"
         self.model.fit(self.ds_train,
                        epochs=self.config['N_EPOCHS'], initial_epoch=0,
                        validation_data=self.ds_val,
