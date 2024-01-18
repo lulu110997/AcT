@@ -10,53 +10,7 @@ import torch.nn as nn
 import torch
 import tensorflow as tf
 from pytorch_model_summary import summary
-
-
-class AcTorch(nn.Module):
-    def __init__(self, transformer_pt, de, d_model, num_frames, num_classes):
-        super(AcTorch, self).__init__()
-
-        self.num_classes = num_classes
-        self.T = num_frames
-        self.d_model = d_model
-        self.de = de
-
-        # Embedding block which projects the input to a higher dimension. In this case, the num_keypoints --> d_model
-        self.project_higher = nn.Linear(52, self.d_model)
-
-        # cls token to concatenate to the projected input
-        self.class_token = nn.Parameter(
-            torch.randn(1, 1, self.d_model), requires_grad=True
-        )  # self.class_embed = self.add_weight(shape=(1, 1, self.d_model),
-        # initializer=self.kernel_initializer, name="class_token")
-
-        # Learnable vectors to be added to the projected input
-        self.pos_embedding = torch.nn.Parameter(
-            torch.randn(self.T + 1, self.d_model), requires_grad=True
-        )  # tf.keras.layers.Embedding(input_dim=(self.n_tot_patches), output_dim=self.d_model)
-
-        # Initialise values of cls and pos emb
-        torch.nn.init.normal_(self.class_token, std=0.02)
-        torch.nn.init.normal_(self.pos_embedding, std=0.02)
-
-        # Transformer encoder
-        self.transformer = transformer_pt
-
-        # Final MLPs
-        self.fc1 = nn.Linear(64, 4*self.d_model)
-        self.fc2 = nn.Linear(4*self.d_model, self.num_classes)
-
-    def forward(self, x):
-        batch_sz = x.shape[0]
-        x = self.project_higher(x)
-        x = x.view(batch_sz, self.d_model, -1).permute(0, 2, 1)
-        x = torch.cat([self.class_token.expand(batch_sz, -1, -1), x], dim=1)
-        x += self.pos_embedding
-        x = self.transformer(x)
-        x = x[:, 0, :]
-        x = self.fc1(x)
-        x = self.fc2(x)
-        return x
+from transformer_model import ActionTransformer
 
 
 config = read_yaml("utils/config.yaml")
@@ -100,7 +54,7 @@ inputs = torch.ones(1, config[config['DATASET']]['FRAMES'] // config['SUBSAMPLE'
                         config[config['DATASET']]['KEYPOINTS'] * config['CHANNELS']).to(gpu)
 
 
-my_model = AcTorch(trans_nn, 64, d_model, 30, 20)
+my_model = ActionTransformer(trans_nn, d_model, 30, 20)
 my_model.to(gpu)
 my_model(inputs)
 # print(count_parameters_pt(my_model))
