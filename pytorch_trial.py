@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import sys
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Stops NUMA error
@@ -31,7 +32,7 @@ class AcTorch(nn.Module):
 
         # Learnable vectors to be added to the projected input
         self.pos_embedding = torch.nn.Parameter(
-            torch.randn(1, self.T + 1, self.d_model), requires_grad=True
+            torch.randn(self.T + 1, self.d_model), requires_grad=True
         )  # tf.keras.layers.Embedding(input_dim=(self.n_tot_patches), output_dim=self.d_model)
 
         # Initialise values of cls and pos emb
@@ -86,14 +87,43 @@ def count_parameters_pt(model):
 # Check GPU
 if not torch.cuda.is_available():
     raise Exception("Cannot find GPU")
+else:
+    gpu = torch.device("cuda:0")
 
 # Create the pt model
+# n_heads doesn't impact learnable params??
+# https://discuss.pytorch.org/t/what-does-increasing-number-of-heads-do-in-the-multi-head-attention/101294/4
 encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=n_heads, dim_feedforward=d_ff, dropout=dropout,
                                            activation="gelu", layer_norm_eps=1e-6, batch_first=True)
 trans_nn = nn.TransformerEncoder(encoder_layer, n_layers)
 inputs = torch.ones(1, config[config['DATASET']]['FRAMES'] // config['SUBSAMPLE'],
-                        config[config['DATASET']]['KEYPOINTS'] * config['CHANNELS'])
+                        config[config['DATASET']]['KEYPOINTS'] * config['CHANNELS']).to(gpu)
 
 
 my_model = AcTorch(trans_nn, 64, d_model, 30, 20)
+my_model.to(gpu)
 my_model(inputs)
+# print(count_parameters_pt(my_model))
+# X_train, y_train, X_test, y_test = load_mpose(config['DATASET'], split, legacy=config['LEGACY'], verbose=False)
+# np.save("test_np_array.npy", X_train[:5,:,:])
+# t_input = np.load("test_np_array.npy")
+# t_input = torch.from_numpy(t_input).to(torch.float32).to(gpu)
+# my_model.eval()
+# t_output = my_model(t_input)
+# np.save("pt_output.npy", t_output.cpu().detach().numpy())
+# my_model = nn.Sequential(
+#     nn.Linear(20, 30)
+# )
+weight_dict = OrderedDict()
+
+modules = my_model.modules()
+print(my_model.state_dict())
+# for l in list(my_model.named_parameters()):
+    # print(l[0], ':', l[1].cpu().detach().numpy().shape)
+# for m in modules:
+#     print(m)
+#     break
+    # # if layer.get_config()['name'] == 'patch_class_embedding':
+    # print(layer.get_config()['name'])
+    # for w in layer.weights:
+    #     print(f"{w.name} has shape: {w.shape}")
