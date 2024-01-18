@@ -30,6 +30,7 @@ pos_emb = config['POS_EMB']
 # Number of different layers in a transformer encoder block
 NUM_DENSE = 6
 NUM_NORM = 2
+T_WPL = 16
 
 def build_act(transformer):
     """
@@ -84,7 +85,7 @@ tf.config.experimental.set_visible_devices(gpus[config['GPU']], 'GPU')
 # Create the keras model
 trans = TransformerEncoder(d_model, n_heads, d_ff, dropout, activation, n_layers)
 model = build_act(trans)
-model.load_weights(config['WEIGHTS'])
+# model.load_weights(config['WEIGHTS'])
 # model.save("micro_AcT.h5")
 # trainable_count = count_params(model.trainable_weights)
 # print(trainable_count) 227156
@@ -107,19 +108,17 @@ for layer in model.layers:
     # print(f"{layer.name} has input shape: {layer.output_shape} and output shape: {layer.output_shape}")
     # print("The weight names and shapes of this layer are as follows")
     if "transformer_encoder" in layer.name:
-        # for w in layer.weights:
-        #     print(w.name)
-        print(len(layer.weights))
-        # h52pt.weight_x(count_mha, weight_dict, layer)
+        for i in range(0, n_layers*T_WPL, 16):
+            tl_weights = layer.weights[i:i+T_WPL]  # Weights of each layer
+            h52pt.weight_x(count_mha, weight_dict, tl_weights, True)
     else:
-        print(len(layer.weights))
-        continue
+
         for w in layer.weights:
             h52pt.weight_x(count_mha, weight_dict, w)
             # print(f"{w.name} {w.shape}")
             # print(np.swapaxes(w.numpy(), 0, 1).shape)
 
-# for w in weight_dict.keys():
-#     print(w, weight_dict[w].shape)
+for w in weight_dict.keys():
+    print(w, weight_dict[w].shape)
 
 
