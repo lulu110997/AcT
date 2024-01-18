@@ -10,3 +10,4 @@ utils/__pycache__/
 _old.py
 *.pdf
 .idea/
+*.npy

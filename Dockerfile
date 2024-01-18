@@ -10,15 +10,16 @@ RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/machi
 ENV TZ=Australia/Sydney
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Add some args for creating user
+# Add some args for creating user. The UID should match your UID. To check, do echo $UID in terminal
 ARG USERNAME=AcT_container
+ARG UID=1005
 ARG HOME_DIR=/home/$USERNAME
 
 # Add user
 # Best practise: don't run as root in container and ensure USERNAME appears in prompt
 # uid has to match id of repo owner on host. Ensures you don't get locked out of your own folder while inside the container
 # Has to correspond to the id of the user that owns the folder being mounted from the host into the container
-RUN useradd --uid 1001 --home-dir $HOME_DIR --create-home $USERNAME
+RUN useradd --uid $UID --home-dir $HOME_DIR --create-home $USERNAME
 
 # Create a default password for the user and make him a sudoer. Variables won't be interpretad inside '', so use "" instead.
 RUN echo "$USERNAME:password" | chpasswd && adduser $USERNAME sudo
@@ -38,7 +39,7 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 RUN mkdir AcT
 
-# Make the user the owner of their home directory + others to allow read/write access
+# Make the user the owner of their home directory to allow read/write access
 RUN chown -R $USERNAME $HOME_DIR
 # RUN chown -R $UID $HOME_DIR/AcT # Might need to run this inside the container itself
 
