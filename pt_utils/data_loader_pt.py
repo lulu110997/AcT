@@ -2,8 +2,9 @@
 """
 Pytorch Dataloader for the mpose dataset
 """
-import sys
 from torch.utils.data import Dataset, DataLoader
+from nptyping import NDArray
+from typing import Any
 from mpose import MPOSE
 import yaml
 from sklearn.model_selection import train_test_split
@@ -30,14 +31,14 @@ labels = {  # 20 Classes
     "pjump": 18,
     "run": 19}
 
-def get_datasets(config_path, split=1, fold=0):
+def get_datasets(config, split=1, fold=0):
     """
     Loads mpose using code from original AcT dataloader
     Args:
-        config_path: string or path | config file
+        config: dict | contains config.yaml file
         split: int | split
         fold: int | fold
-    Returns: torch.utils.data.Dataset | Dataset objects for train, test and val
+    Returns: tuples | 3x tuples that represent x,y train, test and val
     """
 
     class MposeDataset(Dataset):
@@ -48,8 +49,8 @@ def get_datasets(config_path, split=1, fold=0):
                 x: np array | contains features
                 y: np array | contains labels
             """
-            self.x = x
-            self.y = y
+            self.x = x  # type: NDArray[Any]
+            self.y = y  # type: NDArray[Any]
 
         def __len__(self):
             return self.y.shape[0]
@@ -57,8 +58,6 @@ def get_datasets(config_path, split=1, fold=0):
         def __getitem__(self, idx):
             return self.x[idx], self.y[idx]
 
-    with open(config_path, 'r') as file:
-        config = yaml.safe_load(file)
     dataset = config["DATASET"]
     d = MPOSE(pose_extractor=dataset,
               split=split,
@@ -79,11 +78,12 @@ def get_datasets(config_path, split=1, fold=0):
                                                       random_state=config['SEEDS'][fold],
                                                       stratify=y_tv)
 
-    return MposeDataset(X_train, y_train), MposeDataset(X_test, y_test), MposeDataset(X_val, y_val)
+    # return MposeDataset(X_train, y_train), MposeDataset(X_test, y_test), MposeDataset(X_val, y_val)
+    return (X_train, y_train), (X_test, y_test), (X_val, y_val)
 
 
 
-if __name__ == '__main__':
-    train_dataset, test_dataset, val_dataset = get_datasets("../utils/config.yaml")
-    for x, y in DataLoader(train_dataset, batch_size=64):
-        print(y.shape)
+# if __name__ == '__main__':
+#     train_dataset, test_dataset, val_dataset = get_datasets("../utils/config.yaml")
+#     for x, y in DataLoader(train_dataset, batch_size=64):
+#         print(y.shape)

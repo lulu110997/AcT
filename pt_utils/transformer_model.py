@@ -5,7 +5,7 @@ class ActionTransformer(nn.Module):
     """
     Porting https://github.com/PIC4SeR/AcT from Keras to Pytorch
     """
-    def __init__(self, transformer, d_model, num_frames, num_classes, skel_extractor):
+    def __init__(self, transformer, d_model, num_frames, num_classes, skel_extractor, mlp_head_sz):
         """
         Creates the Action Transformer
         Args:
@@ -14,6 +14,7 @@ class ActionTransformer(nn.Module):
             num_frames: int | Number of frames used to classify an action
             num_classes: int | Number of action classes to identify
             skel_extractor: string | openpose, posenet or nuitrack. Determines initial input size for the embedding layer
+            mlp_head_sz: int | Output size of the ff layer prior the classification layer
         """
 
         super(ActionTransformer, self).__init__()
@@ -49,8 +50,8 @@ class ActionTransformer(nn.Module):
         self.transformer = transformer
 
         # Final MLPs
-        self.fc1 = nn.Linear(self.d_model, 4*self.d_model)
-        self.fc2 = nn.Linear(4*self.d_model, self.num_classes)
+        self.fc1 = nn.Linear(self.d_model, mlp_head_sz)
+        self.fc2 = nn.Linear(mlp_head_sz, self.num_classes)
 
     def forward(self, x):
         batch_sz = x.shape[0]

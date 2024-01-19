@@ -1,16 +1,11 @@
 from collections import OrderedDict
-import sys
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Stops NUMA error
-import numpy as np
-from utils.data import load_mpose
-from utils.transformer import TransformerEncoder, PatchClassEmbedding
 from utils.tools import read_yaml
 import torch.nn as nn
 import torch
 import tensorflow as tf
-from pytorch_model_summary import summary
-from transformer_model import ActionTransformer
+from pt_utils.transformer_model import ActionTransformer
 
 
 config = read_yaml("utils/config.yaml")
