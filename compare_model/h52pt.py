@@ -81,9 +81,9 @@ def weight_x(count, dict_pt, w_info, transformer_layer=False):
                     dict_pt[pt_layer_name + "self_attn.in_proj_bias"] = np.concatenate((top, bot))
             elif w_idx in OUT_WEIGHTS:  # Linear layer for reduction
                 if "kernel" in w_transf.name:
-                    dict_pt[pt_layer_name + "out_proj.weight"] = w_transf.numpy()
+                    dict_pt[pt_layer_name + "self_attn.out_proj.weight"] = w_transf.numpy()
                 elif "bias" in w_transf.name:
-                    dict_pt[pt_layer_name + "out_proj.bias"] = w_transf.numpy()
+                    dict_pt[pt_layer_name + "self_attn.out_proj.bias"] = w_transf.numpy()
                 else:
                     print(w_transf.name)
                     raise Exception("not kernel or bias?")
