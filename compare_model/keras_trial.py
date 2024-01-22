@@ -1,19 +1,16 @@
-import sys
 import os
+import sys
+
+import numpy as np
 import h52pt
-import torch.nn
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Stops NUMA error
-import numpy as np
-import pickle
-from utils.data import load_mpose
 from utils.tools import read_yaml
 from utils.transformer import TransformerEncoder, PatchClassEmbedding
 import tensorflow as tf
-from keras.utils.layer_utils import count_params
 from pickle_wrapper import *
 # Constants
-config = read_yaml("utils/config.yaml")
+config = read_yaml("../utils/config.yaml")
 model_size = config['MODEL_SIZE']
 split = 1
 fold = 0
@@ -32,6 +29,32 @@ pos_emb = config['POS_EMB']
 NUM_DENSE = 6
 NUM_NORM = 2
 T_WPL = 16
+
+
+def save_weights(model):
+    weight_dict = {}
+    count_dense = 0
+    count_mha = 0
+    count_norm = 0
+    for layer in model.layers:
+        if (not layer.trainable) or ('input' in layer.name):
+            continue
+
+        # print(f"{layer.name} has input shape: {layer.output_shape} and output shape: {layer.output_shape}")
+        # print("The weight names and shapes of this layer are as follows")
+        if "transformer_encoder" in layer.name:
+            for i in range(0, n_layers * T_WPL, 16):
+                tl_weights = layer.weights[i:i + T_WPL]  # Weights of each layer
+                h52pt.weight_x(count_mha, weight_dict, tl_weights, True)
+        else:
+
+            for w in layer.weights:
+                h52pt.weight_x(count_mha, weight_dict, w)
+                # print(f"{w.name} {w.shape}")
+                # print(np.swapaxes(w.numpy(), 0, 1).shape)
+
+    return weight_dict
+
 
 def build_act(transformer):
     """
@@ -92,35 +115,17 @@ model.load_weights(config['WEIGHTS'])
 # print(model.summary())
 
 # Load dummy input and save output as a numpy array
-# np_input = np.load("test_np_array.npy")
-# t_input = tf.convert_to_tensor(np_input)
-# t_output = model(t_input)
-# np.save("tf_output.npy", t_output.numpy())
+np_input = np.load("test_array.npy")
+t_input = tf.convert_to_tensor(np_input)
+t_output = model(t_input)
+# print(t_output)
+np.save("tf_output.npy", t_output.numpy())
 
-print("########## SAVE WEIGHTS IN DICT ##########")
-weight_dict = {}
-count_dense = 0
-count_mha = 0
-count_norm = 0
-for layer in model.layers:
-    if (not layer.trainable) or ('input' in layer.name):
-        continue
+# print("########## SAVE WEIGHTS IN DICT ##########")
+weight_dict = save_weights(model)
+# save_pickle("keras_weight_dict", weight_dict)
 
-    # print(f"{layer.name} has input shape: {layer.output_shape} and output shape: {layer.output_shape}")
-    # print("The weight names and shapes of this layer are as follows")
-    if "transformer_encoder" in layer.name:
-        for i in range(0, n_layers*T_WPL, 16):
-            tl_weights = layer.weights[i:i+T_WPL]  # Weights of each layer
-            h52pt.weight_x(count_mha, weight_dict, tl_weights, True)
-    else:
-
-        for w in layer.weights:
-            h52pt.weight_x(count_mha, weight_dict, w)
-            # print(f"{w.name} {w.shape}")
-            # print(np.swapaxes(w.numpy(), 0, 1).shape)
-
-
-save_pickle("keras_weight_dict", weight_dict)
+# Print keys of the wieght dict
 # for w in weight_dict.keys():
 #     print(w, weight_dict[w].shape)
 

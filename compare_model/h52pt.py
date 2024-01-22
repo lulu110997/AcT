@@ -81,7 +81,7 @@ def weight_x(count, dict_pt, w_info, transformer_layer=False):
                     dict_pt[pt_layer_name + "self_attn.in_proj_bias"] = np.concatenate((top, bot))
             elif w_idx in OUT_WEIGHTS:  # Linear layer for reduction
                 if "kernel" in w_transf.name:
-                    dict_pt[pt_layer_name + "self_attn.out_proj.weight"] = w_transf.numpy()
+                    dict_pt[pt_layer_name + "self_attn.out_proj.weight"] = np.swapaxes(w_transf.numpy(), 0, 1)
                 elif "bias" in w_transf.name:
                     dict_pt[pt_layer_name + "self_attn.out_proj.bias"] = w_transf.numpy()
                 else:
@@ -136,7 +136,7 @@ def weight_x(count, dict_pt, w_info, transformer_layer=False):
     elif "class_token" in w_info.name:
         dict_pt["class_token"] = w_info.numpy()
     elif "patch_class" in w_info.name:
-        dict_pt["pos_embedding"] = w_info.numpy()
+        dict_pt["position_embedding.weight"] = w_info.numpy()
     else:
         print("########## error ##########")
         print(w_info.name)

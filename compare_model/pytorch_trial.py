@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import tensorflow as tf
 
-config = read_yaml("utils/config.yaml")
+config = read_yaml("../utils/config.yaml")
 
 # Constants
 model_size = config['MODEL_SIZE']
@@ -18,7 +18,7 @@ n_heads = config[model_size]['N_HEADS']
 n_layers = config[model_size]['N_LAYERS']
 embed_dim = config[model_size]['EMBED_DIM']
 dropout = config[model_size]['DROPOUT']
-mlp_head_size = config[model_size]['MLP']
+mlp_head_sz = config[model_size]['MLP']
 activation = tf.nn.gelu
 d_model = 64 * n_heads
 d_ff = d_model * 4
@@ -26,7 +26,6 @@ pos_emb = config['POS_EMB']
 num_frames = 30
 num_classes = 20
 skel_extractor = 'openpose'
-mlp_head_sz = 256
 
 
 def count_parameters_pt(model):
@@ -59,16 +58,20 @@ model(inputs)
 # Count number of trainable parameters
 # print(count_parameters_pt(model))
 
-
-# Load keras weights
+# Load keras weights OR check name of weights and their shape
 weights_dict = open_pickle("keras_weight_dict.pickle")
 for name, param in model.named_parameters():
-    param.data = torch.tensor(weights_dict[name]).to(gpu)
+    if name in weights_dict.keys():
+        param.data = torch.tensor(weights_dict[name]).to(gpu)
+    else:
+        raise Exception(f"weight for {name} is not found ")
+    # print(name, param.data.shape)
 
 # Load dummy input and save output as a numpy array
-np_input = np.load("test_np_array.npy")
+np_input = np.load("test_array.npy")
 t_input = torch.tensor(np_input).to(torch.float).to(gpu)
 model.eval()
 t_output = model(t_input)
-np.save("tf_output.npy", t_output.cpu().detach().numpy())
+# print(t_output)
+np.save("pt_output.npy", t_output.cpu().detach().numpy())
 
