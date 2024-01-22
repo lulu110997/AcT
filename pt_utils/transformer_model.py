@@ -56,11 +56,11 @@ class ActionTransformer(nn.Module):
     def forward(self, x):
         batch_sz = x.shape[0]
         x = self.project_higher(x)
-        x = x.view(batch_sz, self.d_model, -1).permute(0, 2, 1)
+        x = x.view(batch_sz, self.d_model, -1).permute(0, 2, 1)  # Keras and pt have different channel definitions
         x = torch.cat([self.class_token.expand(batch_sz, -1, -1), x], dim=1)
         x += self.pos_embedding
         x = self.transformer(x)
-        x = x[:, 0, :]
+        x = x[:, 0, :]  # TODO: Check this is correct
         x = self.fc1(x)
         x = self.fc2(x)
         return x
