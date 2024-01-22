@@ -4,9 +4,9 @@ class CustomSchedule:
     from git@github.com:jadore801120/attention-is-all-you-need-pytorch.git
     """
 
-    def __init__(self, optimizer, lr_mul, d_model, n_warmup_steps):
+    def __init__(self, optimizer, decay_step, d_model, n_warmup_steps):
         self._optimizer = optimizer
-        self.lr_mul = lr_mul
+        self.decay_step = decay_step
         self.d_model = d_model
         self.n_warmup_steps = n_warmup_steps
         self.n_steps = 0
@@ -35,7 +35,10 @@ class CustomSchedule:
         """
 
         self.n_steps += 1
-        lr = self.lr_mul * self._get_lr_scale()
+        if self.n_steps > self.decay_step:
+            lr = 0.0001
+        else:
+            lr = self._get_lr_scale()
 
         for param_group in self._optimizer.param_groups:
             param_group['lr'] = lr

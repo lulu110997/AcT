@@ -120,11 +120,11 @@ class Trainer:
 
         # https://stackoverflow.com/questions/69576720/implementing-custom-learning-rate-scheduler-in-pytorch
         # optimizer = tfa.optimizers.AdamW(learning_rate=lr, weight_decay=self.config['WEIGHT_DECAY'])
-        optimiser = torch.optim.AdamW(self.model.parameters(), lr=1e-4, betas=(0.9, 0.999), eps=1e-07,
-                                      weight_decay=self.config['WEIGHT_DECAY'])
-        self.lr = CustomSchedule(d_model=self.d_model, optimizer=optimiser,
-                            n_warmup_steps=self.train_steps * self.config['N_EPOCHS'] * self.config['WARMUP_PERC'],
-                            lr_mul=self.train_steps * self.config['N_EPOCHS'] * self.config['STEP_PERC'])
+        self.optimiser = torch.optim.AdamW(self.model.parameters(), lr=1e-4, betas=(0.9, 0.999), eps=1e-07,
+                                           weight_decay=self.config['WEIGHT_DECAY'])
+        self.lr = CustomSchedule(d_model=self.d_model, optimizer=self.optimiser,
+                                 n_warmup_steps=self.train_steps * self.config['N_EPOCHS'] * self.config['WARMUP_PERC'],
+                                 decay_step=self.train_steps * self.config['N_EPOCHS'] * self.config['STEP_PERC'])
 
         # loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1)
         # https://datascience.stackexchange.com/questions/73093/what-does-from-logits-true-do-in-sparsecategoricalcrossentropy-loss-function
