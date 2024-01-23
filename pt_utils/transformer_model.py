@@ -24,7 +24,7 @@ class ActionTransformer(torch.nn.Module):
         elif skel_extractor == "posenet":
             self.in1 = 68  # (x,y,vx,vy) w/ 17 keypoints
         elif skel_extractor == "nuitrack":
-            self.in1 = 98  # (x,yz,qx,qy,qz,qw) w/ 14 keypoints
+            self.in1 = 98  # (x,y,z,qx,qy,qz,qw) w/ 14 keypoints
         self.num_classes = num_classes
         self.T = num_frames
         self.d_model = d_model
@@ -36,9 +36,8 @@ class ActionTransformer(torch.nn.Module):
         # https://github.com/MathInf/toroidal/blob/bff09f725627e4629d464008dc7c5f9d6322ebad/toroidal/models.py#L18
 
         # cls token to concatenate to the projected input
-        self.class_token = torch.nn.Parameter(
-            torch.randn(1, 1, self.d_model), requires_grad=True
-        )  # self.class_embed = self.add_weight(shape=(1, 1, self.d_model),
+        self.class_token = torch.nn.Parameter(torch.randn(1, 1, self.d_model), requires_grad=True)
+        # self.class_embed = self.add_weight(shape=(1, 1, self.d_model),
         # initializer=self.kernel_initializer, name="class_token")
 
         # Learnable vectors to be added to the projected input
@@ -48,17 +47,26 @@ class ActionTransformer(torch.nn.Module):
         # https://stackoverflow.com/questions/71417255/how-should-the-output-of-my-embedding-layer-look-keras-to-pytorch
         self.position_embedding = torch.nn.Embedding(self.T+1, self.d_model)
 
-
-        # Initialise values of cls and pos emb TODO: how is this initialised using keras? What else did they init
-        torch.nn.init.normal_(self.class_token, std=0.02)
-        # torch.nn.init.normal_(self.pos_embedding, std=0.02)
-
         # Transformer encoder
         self.transformer = transformer
 
         # Final MLPs
         self.fc1 = torch.nn.Linear(self.d_model, mlp_head_sz)
         self.fc2 = torch.nn.Linear(mlp_head_sz, self.num_classes)
+
+        # Initialise weights of layers TODO: how is this initialised using keras?
+        torch.nn.init.normal_(self.class_token, std=(2.0/self.d_model)**0.5)  # HeNormal
+        torch.nn.init.xavier_uniform_(self.fc1.weight.data)  # glorot_uniform
+        torch.nn.init.xavier_uniform_(self.fc2.weight.data)
+        torch.nn.init.xavier_uniform_(self.project_higher.weight.data)
+        for name, params in self.transformer.named_parameters():
+            try:
+                if len(params.data.shape) > 1:
+                    torch.nn.init.xavier_uniform_(params.data)
+                elif ('bias' in name) and (('linear' in name) or ('attn' in name)):
+                    torch.nn.init.zeros_(params.data)
+            except:
+                print(name)
 
     def forward(self, x):
         batch_sz = x.shape[0]
@@ -68,7 +76,7 @@ class ActionTransformer(torch.nn.Module):
         pe = self.position_embedding(positions)  # Feed position vectors to embedding layer??
         x += pe  # Add pos emb to input
         x = self.transformer(x)  # Feed through the transformer
-        x = x[:, 0, :]  # Obtain the cls vectors TODO: Check this is correct
+        x = x[:, 0, :]  # Obtain the cls vectors
         x = self.fc1(x)  # Feed through a ff network
         x = self.fc2(x)  # Feed through classification layer
         return x

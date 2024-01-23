@@ -100,9 +100,9 @@ def build_act(transformer):
 
 
 # Use GPU
-gpus = tf.config.experimental.list_physical_devices('GPU')
-tf.config.experimental.set_memory_growth(gpus[config['GPU']], True)
-tf.config.experimental.set_visible_devices(gpus[config['GPU']], 'GPU')
+# gpus = tf.config.experimental.list_physical_devices('GPU')
+# tf.config.experimental.set_memory_growth(gpus[config['GPU']], True)
+# tf.config.experimental.set_visible_devices(gpus[config['GPU']], 'GPU')
 
 # Create the keras model and load weights
 trans = TransformerEncoder(d_model, n_heads, d_ff, dropout, activation, n_layers)
@@ -115,18 +115,16 @@ model.load_weights(config['WEIGHTS'])
 # print(model.summary())
 
 # Load dummy input and save output as a numpy array
-np_input = np.load("test_array.npy")
-t_input = tf.convert_to_tensor(np_input)
-t_output = model(t_input)
+# np_input = np.load("test_array.npy")
+# t_input = tf.convert_to_tensor(np_input)
+# t_output = model(t_input)
 # print(t_output)
-np.save("tf_output.npy", t_output.numpy())
+# np.save(f"tf_output_{model_size}.npy", t_output.numpy())
 
 # print("########## SAVE WEIGHTS IN DICT ##########")
-weight_dict = save_weights(model)
-# save_pickle("keras_weight_dict", weight_dict)
+# weight_dict = save_weights(model)
+# save_pickle(f"keras_weight_dict_{model_size}", weight_dict)
 
 # Print keys of the wieght dict
 # for w in weight_dict.keys():
 #     print(w, weight_dict[w].shape)
-
-

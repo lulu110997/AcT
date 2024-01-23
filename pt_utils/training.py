@@ -7,6 +7,8 @@ from datetime import datetime
 from sklearn.metrics import balanced_accuracy_score, accuracy_score
 from utils.tools import Logger
 
+import pickle_wrapper as _pw
+import matplotlib.pyplot as plt
 import yaml
 import numpy as np
 import torch.utils.data
@@ -72,12 +74,14 @@ class Trainer:
         self.N_SPLITS = self.config["SPLITS"]
         self.DEVICE = torch.device("cuda:0")
 
-        self.weights_path = f"/home/louis/Data/Fernandez_HAR/AcT_pt/{self.model_sz}/weights/"
-        self.log_path = f"/home/louis/Data/Fernandez_HAR/AcT_pt/{self.model_sz}/logs/"
+        now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+        self.weights_path = f"/home/louis/Data/Fernandez_HAR/AcT_pt/{self.model_sz}_{now}/weights/"
+        self.log_path = f"/home/louis/Data/Fernandez_HAR/AcT_pt/{self.model_sz}_{now}/logs/"
+        self.plots_path = f"/home/louis/Data/Fernandez_HAR/AcT_pt/{self.model_sz}_{now}/plots/"
         check_dir(self.weights_path)
         check_dir(self.log_path)
-        now = datetime.now()
-        log_file = os.path.join(self.log_path, now.strftime("%Y_%m_%d_%H_%M_%S")+'.txt')
+        check_dir(self.plots_path)
+        log_file = os.path.join(self.log_path, 'log' + '.txt')
         self.logger = Logger(log_file)
 
     def get_data(self):
@@ -96,11 +100,11 @@ class Trainer:
         test_dataset = torch.utils.data.TensorDataset(test_x, test_y)
         val_dataset = torch.utils.data.TensorDataset(val_x, val_y)
         self.training_loader = torch.utils.data.DataLoader(train_dataset, batch_size=self.config['BATCH_SIZE'],
-                                                           shuffle=True)
+                                                           shuffle=True, drop_last=True)
         self.test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=self.config['BATCH_SIZE'],
-                                                       shuffle=True)
+                                                       shuffle=True, drop_last=True)
         self.val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=self.config['BATCH_SIZE'],
-                                                      shuffle=True)
+                                                      shuffle=True, drop_last=True)
 
     def get_model(self):
         """
@@ -145,7 +149,7 @@ class Trainer:
             self.split = split
 
             for fold in range(self.N_FOLD):
-                self.logger.save_log(f"----- Start Fold {fold} at {time.time()} ----\n")
+                self.logger.save_log(f"----- Start Fold {fold+1} at {time.time()} ----")
                 self.fold = fold
                 self.get_data()
                 self.get_model()
@@ -153,12 +157,9 @@ class Trainer:
                 acc, bal_acc = self.eval(weights_path)
                 acc_list.append(acc[0])
                 bal_acc_list.append(bal_acc[0])
-                self.logger.save_log(f"Accuracy mean: {acc[0]}")
-                self.logger.save_log(f"Accuracy std: {acc[1]}")
-                self.logger.save_log(f"Balanced Accuracy mean: {bal_acc[0]}")
-                self.logger.save_log(f"Balanced Accuracy std: {bal_acc[1]}")
+                self.logger.save_log(f"Accuracy Test: {acc[0]} <> Balanced Accuracy: {bal_acc[0]}\n")
 
-            self.logger.save_log(f"\n---- Split {split} ----")
+            self.logger.save_log(f"---- Split {split} ----")
             self.logger.save_log(f"Accuracy mean: {statistics.mean(acc_list)}")
             self.logger.save_log(f"Accuracy std: {statistics.pstdev(acc_list)}")
             self.logger.save_log(f"Balanced Accuracy mean: {statistics.mean(bal_acc_list)}")
@@ -172,39 +173,48 @@ class Trainer:
         Returns: string | path to the best model for across all epochs
         """
         max_bal_acc = 0.0
-
+        epoch_loss_train = []
+        epoch_loss_test = []
         for epoch in range(self.N_EPOCHS):
+            train_loss = 0
             self.model.train()
             for batch_x, batch_y in self.training_loader:
                 # Call scheduler at the right time
                 # https://stackoverflow.com/questions/69576720/implementing-custom-learning-rate-scheduler-in-pytorch
-                # TODO: model.zero_grad() or optimiser.zero_grad()? Call at epoch or batch
                 # https://stackoverflow.com/questions/48001598/why-do-we-need-to-call-zero-grad-in-pytorch
                 self.lr.zero_grad()
                 batch_x = batch_x.to(torch.float)
                 batch_y = batch_y.to(torch.float)
                 output = self.model(batch_x.to(self.DEVICE))
-                loss = self.loss_fn(output, batch_y.to(self.DEVICE))
+                loss = self.loss_fn(output, torch.argmax(batch_y.to(self.DEVICE), dim=1))
                 loss.backward()
                 self.lr.step_and_update_lr()
+                train_loss += loss.cpu().detach().item()
+            epoch_loss_train.append(train_loss)
 
             # Perform test in between epoch
+            test_loss = 0
             self.model.eval()
             bal_acc_list = []
             for batch_x, batch_y in self.val_loader:
                 batch_x = batch_x.to(torch.float)
                 batch_y = batch_y.to(torch.float)
                 output = self.model(batch_x.to(self.DEVICE))
+                test_loss += self.loss_fn(output, batch_y.to(self.DEVICE)).cpu().detach().item()
+
+                # Obtain accuracy metrics for test dataset
                 pred = torch.argmax(torch.softmax(output, dim=-1), dim=1)  # Apply softmax here
                 labels = torch.argmax(batch_y, dim=1)
-                bal_acc_list.append(balanced_accuracy_score(labels.cpu().detach(), pred.cpu().detach()))
+                bal_acc_list.append(accuracy_score(labels.cpu().detach(), pred.cpu().detach()))
+                # bal_acc_list.append(balanced_accuracy_score(labels.cpu().detach(), pred.cpu().detach()))
+            epoch_loss_test.append(test_loss)
             bal_acc = statistics.mean(bal_acc_list)
-            if bal_acc > max_bal_acc:
+            if bal_acc > max_bal_acc:  # TODO: what metric does keras use to choose best weight?
                 # Save the weights, split, fold, epoch and batch info
                 max_bal_acc = bal_acc
-                save_path = os.path.join(self.weights_path, f"s_{self.split}_f{self.fold}_bal_acc_{max_bal_acc}.pt")
+                save_path = os.path.join(self.weights_path, f"s_{self.split}_f{self.fold}_best.pt")
                 torch.save(self.model.state_dict(), save_path)
-
+        self.fold_loss(epoch_loss_train, epoch_loss_test)
         return save_path
 
     def eval(self, weight_path=None):
@@ -233,6 +243,30 @@ class Trainer:
         bal_acc_std_dev = statistics.pstdev(bal_acc_list)
 
         return (acc, acc_std_dev), (bal_acc, bal_acc_std_dev)
+
+    def fold_loss(self, train_loss, test_loss):
+        """
+        Plots and saves how the epoch loss evolves for this split/fold
+        Args:
+            train_loss: list | training loss throughout the epochs
+            test_loss: list | testing loss throughout the epochs
+        Returns: None
+        """
+        x = np.linspace(1, self.N_EPOCHS, self.N_EPOCHS)
+
+        fig, ax1 = plt.subplots()
+        fig.suptitle(f"Loss for split {self.split} fold {self.fold}")
+        fig.set_size_inches(10.8, 7.2)
+        ax2 = ax1.twinx()
+        ax1.plot(x, train_loss, color='r')
+        ax1.set_ylabel("Training loss", color='r', fontsize=14)
+        test_loss.reverse()
+        ax2.plot(x, test_loss, color='b')
+        ax2.set_ylabel("Testing loss", color='b', fontsize=14)
+        plt.savefig(self.plots_path + f"s_{self.split}_f_{self.fold}.jpg", dpi=100)
+
+        _pw.save_pickle(self.plots_path + f"s_{self.split}_f_{self.fold}_train_loss.pickle", train_loss)
+        _pw.save_pickle(self.plots_path + f"s_{self.split}_f_{self.fold}_test_loss.pickle", test_loss)
 
 if __name__ == '__main__':
     trainer = Trainer()
