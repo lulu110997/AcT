@@ -2,6 +2,7 @@ class CustomSchedule:
     """
     A simple wrapper class for learning rate scheduling
     from git@github.com:jadore801120/attention-is-all-you-need-pytorch.git
+    https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/Optim.py
     """
 
     def __init__(self, optimizer, decay_step, d_model, n_warmup_steps):
@@ -10,6 +11,8 @@ class CustomSchedule:
         self.d_model = d_model
         self.n_warmup_steps = n_warmup_steps
         self.n_steps = 0
+        for param_group in self._optimizer.param_groups:
+            self.lr = param_group['lr']
 
     def step_and_update_lr(self):
         """"
@@ -36,9 +39,9 @@ class CustomSchedule:
 
         self.n_steps += 1
         if self.n_steps > self.decay_step:
-            lr = 0.0001
+            lr = 1e-4 #* self.lr
         else:
-            lr = self._get_lr_scale()
+            lr = self._get_lr_scale() #* self.lr
 
         for param_group in self._optimizer.param_groups:
             param_group['lr'] = lr

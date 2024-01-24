@@ -123,8 +123,22 @@ model.load_weights(config['WEIGHTS'])
 
 # print("########## SAVE WEIGHTS IN DICT ##########")
 # weight_dict = save_weights(model)
-# save_pickle(f"keras_weight_dict_{model_size}", weight_dict)
+# save_pickle(f"keras_weight_dict_{model_size}_1", weight_dict)
 
 # Print keys of the wieght dict
 # for w in weight_dict.keys():
 #     print(w, weight_dict[w].shape)
+
+root = '/home/louis/Data/Fernandez_HAR/AcT_posenet_processed_data/'
+test_x = tf.convert_to_tensor(np.load(root + f"X_test_processed_split{1}_fold{1}.npy"))
+test_y = tf.convert_to_tensor(np.load(root + f"y_test_processed_split{1}_fold{1}.npy"))
+test_dataset = tf.data.Dataset.from_tensor_slices((test_x, test_y))
+test_dataset = test_dataset.batch(512)
+loss_fn = tf.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1)
+for bx, by in test_dataset:
+    # print(bx[0,:10,:10])
+    label = by
+    output = model.predict(bx)
+    loss = loss_fn(label, output)
+    print(loss)
+    sys.exit()

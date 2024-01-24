@@ -14,7 +14,9 @@ keras ==2.6.0  # We get some error about dtensor https://stackoverflow.com/quest
 # Install pytorch with cuda11.8. Need to find a version that works for both. Atm cuda should be V11.2.152 according to
 # docker for tf2.6. Also this current version of pt req typing-extensions~=4.9.0 but tf2.6 requires typing-extensions~=3.7.4
 pytorch-model-summary==0.1.2
+pytorch-ignite==0.4.13
 --extra-index-url https://download.pytorch.org/whl/cu113
-torch==1.12.1+cu113
+pytorch-ignite==0.4.13
+torch==1.12.1+cu113 # Was 2.1.1+cu118
 torchvision==0.13.1+cu113
 torchaudio==0.12.1

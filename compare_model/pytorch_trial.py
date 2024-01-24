@@ -1,4 +1,4 @@
-import os;
+import os
 import sys
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Stops NUMA error
@@ -11,7 +11,7 @@ import warnings
 import torch
 import torch.utils.data
 import tensorflow as tf
-
+torch.manual_seed(9)
 # Check GPU
 if not torch.cuda.is_available():
     warnings.warn("Cannot find GPU")
@@ -81,10 +81,10 @@ weight_dict = open_pickle(f"keras_weight_dict_{model_size}.pickle")
 load_weight(model, weight_dict)
 
 # Load dummy input and save output as a numpy array
-np_input = np.load("test_array.npy")
-t_input = torch.tensor(np_input).to(torch.float).to(device)
-model.eval()
-t_output = model(t_input)
+# np_input = np.load("test_array.npy")
+# t_input = torch.tensor(np_input).to(torch.float).to(device)
+# model.eval()
+# t_output = model(t_input)
 # print(t_output)
 # np.save(f"pt_output_{model_size}.npy", t_output.cpu().detach().numpy())
 
@@ -108,7 +108,21 @@ root = '/home/louis/Data/Fernandez_HAR/AcT_posenet_processed_data/'
 test_x = torch.tensor(np.load(root + f"X_test_processed_split{1}_fold{1}.npy"))
 test_y = torch.tensor(np.load(root + f"y_test_processed_split{1}_fold{1}.npy"))
 test_dataset = torch.utils.data.TensorDataset(test_x, test_y)
-test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=2, shuffle=True, drop_last=True)
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=512, shuffle=False, drop_last=True)
+loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1, reduction='mean')
+# loss_fn = torch.nn.NLLLoss()
+
 for bx, by in test_loader:
-    print(torch.argmax(by, dim=1))
+    # print(bx[0,:10,:10])
+
+    model.eval()
+    label = torch.argmax(by, dim=1).to(device)
+    # label = by.to(device)
+    output = model(bx.to(torch.float).to(device))
+    # loss = loss_fn(torch.log_softmax(output, dim=1), label)
+    loss = loss_fn(output, label)
+    print(loss)
+    # tmp1 = -(torch.nn.functional.log_softmax(output, dim=1) * label).sum(dim=1).mean()
+    # tmp2 = torch.nn.functional.cross_entropy(input=output, target=label)
+    # print(tmp1, tmp2)
     sys.exit()

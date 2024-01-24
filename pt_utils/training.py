@@ -1,11 +1,15 @@
 # Imports
 import sys
+import warnings
+warnings.filterwarnings("ignore", message="y_pred contains classes not in y_true")
+warnings.filterwarnings("ignore", message="enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.self_attn.num_heads is odd")
 
 from transformer_model import ActionTransformer
 from scheduler import CustomSchedule
 from datetime import datetime
 from sklearn.metrics import balanced_accuracy_score, accuracy_score
 from utils.tools import Logger
+from confusion_matrix import ConfusionMatrix as _cm
 
 import pickle_wrapper as _pw
 import matplotlib.pyplot as plt
@@ -26,6 +30,20 @@ def check_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
+def load_weight(model, weight_dict):
+    """
+    Loads the weight to the target model
+    Args:
+        model: torch model
+        weight_dict: dictionary | contains the names of each weight and their values
+
+    Returns: None
+    """
+    for name, param in model.named_parameters():
+        if name in weight_dict.keys():
+            param.data = torch.tensor(weight_dict[name]).to("cuda:0")
+        else:
+            raise Exception(f"weight, with shape {param.data.shape}, for {name} is not found")
 
 class Trainer:
     """
@@ -63,6 +81,7 @@ class Trainer:
         assert self.d_model == 64*self.n_heads
         self.skel_extractor = "openpose"
 
+        self.weight_dict = _pw.open_pickle("keras_weight_dict_micro_init.pickle")
         self.SCHEDULER = self.config["SCHEDULER"]
         self.N_EPOCHS = self.config["N_EPOCHS"]
         self.BATCH_SIZE = self.config["BATCH_SIZE"]
@@ -72,8 +91,14 @@ class Trainer:
         self.LR_MULT = self.config["LR_MULT"]
         self.N_FOLD = self.config["FOLDS"]
         self.N_SPLITS = self.config["SPLITS"]
-        self.DEVICE = torch.device("cuda:0")
+        # Check GPU
+        if not torch.cuda.is_available():
+            warnings.warn("Cannot find GPU")
+            self.DEVICE = "cpu"
+        else:
+            self.DEVICE = "cuda:0"
 
+        # Paths to save results
         now = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
         self.weights_path = f"/home/louis/Data/Fernandez_HAR/AcT_pt/{self.model_sz}_{now}/weights/"
         self.log_path = f"/home/louis/Data/Fernandez_HAR/AcT_pt/{self.model_sz}_{now}/logs/"
@@ -100,11 +125,9 @@ class Trainer:
         test_dataset = torch.utils.data.TensorDataset(test_x, test_y)
         val_dataset = torch.utils.data.TensorDataset(val_x, val_y)
         self.training_loader = torch.utils.data.DataLoader(train_dataset, batch_size=self.config['BATCH_SIZE'],
-                                                           shuffle=True, drop_last=True)
-        self.test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=self.config['BATCH_SIZE'],
-                                                       shuffle=True, drop_last=True)
-        self.val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=self.config['BATCH_SIZE'],
-                                                      shuffle=True, drop_last=True)
+                                                           shuffle=True, num_workers=1)
+        self.test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=self.config['BATCH_SIZE'])
+        self.val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=self.config['BATCH_SIZE'])
 
     def get_model(self):
         """
@@ -120,11 +143,10 @@ class Trainer:
                                        self.skel_extractor, self.mlp_head_sz).to(self.DEVICE)
 
         self.train_steps = np.ceil(float(len(self.training_loader.dataset)) / self.config['BATCH_SIZE'])
-        self.test_steps = np.ceil(float(len(self.test_loader.dataset)) / self.config['BATCH_SIZE'])
 
         # https://stackoverflow.com/questions/69576720/implementing-custom-learning-rate-scheduler-in-pytorch
         # optimizer = tfa.optimizers.AdamW(learning_rate=lr, weight_decay=self.config['WEIGHT_DECAY'])
-        self.optimiser = torch.optim.AdamW(self.model.parameters(), lr=1e-4, betas=(0.9, 0.999), eps=1e-07,
+        self.optimiser = torch.optim.AdamW(self.model.parameters(), betas=(0.9, 0.999), eps=1e-07,
                                            weight_decay=self.config['WEIGHT_DECAY'])
         self.lr = CustomSchedule(d_model=self.d_model, optimizer=self.optimiser,
                                  n_warmup_steps=self.train_steps * self.config['N_EPOCHS'] * self.config['WARMUP_PERC'],
@@ -137,7 +159,7 @@ class Trainer:
         # https://discuss.pytorch.org/t/categorical-cross-entropy-loss-function-equivalent-in-pytorch/85165/7
         # or not?
         # https://discuss.pytorch.org/t/cant-replicate-keras-categoricalcrossentropy-with-pytorch/146747
-        self.loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1, reduction="sum")
+        self.loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1, reduction='mean')  # TODO: correct?
 
 
     def main(self):
@@ -153,6 +175,7 @@ class Trainer:
                 self.fold = fold
                 self.get_data()
                 self.get_model()
+                load_weight(self.model, self.weight_dict)
                 weights_path = self.train()
                 acc, bal_acc = self.eval(weights_path)
                 acc_list.append(acc[0])
@@ -183,10 +206,10 @@ class Trainer:
                 # https://stackoverflow.com/questions/69576720/implementing-custom-learning-rate-scheduler-in-pytorch
                 # https://stackoverflow.com/questions/48001598/why-do-we-need-to-call-zero-grad-in-pytorch
                 self.lr.zero_grad()
-                batch_x = batch_x.to(torch.float)
-                batch_y = batch_y.to(torch.float)
+                batch_x = batch_x.to(torch.float32)
+                batch_y = batch_y.to(torch.float32)
                 output = self.model(batch_x.to(self.DEVICE))
-                loss = self.loss_fn(output, torch.argmax(batch_y.to(self.DEVICE), dim=1))
+                loss = self.loss_fn(output, torch.argmax(batch_y, dim=1).to(self.DEVICE))
                 loss.backward()
                 self.lr.step_and_update_lr()
                 train_loss += loss.cpu().detach().item()
@@ -197,10 +220,10 @@ class Trainer:
             self.model.eval()
             bal_acc_list = []
             for batch_x, batch_y in self.val_loader:
-                batch_x = batch_x.to(torch.float)
-                batch_y = batch_y.to(torch.float)
+                batch_x = batch_x.to(torch.float32)
+                batch_y = batch_y.to(torch.float32)
                 output = self.model(batch_x.to(self.DEVICE))
-                test_loss += self.loss_fn(output, batch_y.to(self.DEVICE)).cpu().detach().item()
+                test_loss += self.loss_fn(output, torch.argmax(batch_y, dim=1).to(self.DEVICE)).cpu().detach().item()
 
                 # Obtain accuracy metrics for test dataset
                 pred = torch.argmax(torch.softmax(output, dim=-1), dim=1)  # Apply softmax here
@@ -227,16 +250,20 @@ class Trainer:
         self.model.load_state_dict(torch.load(weight_path))
         acc_list = []
         bal_acc_list = []
+        conf_matr = _cm(self.num_classes, labels=self.config["LABELS"])
 
         self.model.eval()
         for batch_x, batch_y in self.test_loader:
-            batch_x = batch_x.to(torch.float)
-            batch_y = batch_y.to(torch.float)
+            batch_x = batch_x.to(torch.float32)
+            batch_y = batch_y.to(torch.float32)
             output = self.model(batch_x.to(self.DEVICE))
-            pred = torch.argmax(torch.softmax(output, dim=-1), dim=1)  # Apply softmax here
-            labels = torch.argmax(batch_y, dim=1)
-            acc_list.append(accuracy_score(labels.cpu().detach(), pred.cpu().detach()))
-            bal_acc_list.append(balanced_accuracy_score(labels.cpu().detach(), pred.cpu().detach()))
+            prob_dist = torch.softmax(output, dim=-1) # Apply softmax here
+            pred = torch.argmax(prob_dist, dim=1).cpu().detach()
+            labels = torch.argmax(batch_y, dim=1).cpu().detach()
+            conf_matr.update(prob_dist.cpu().detach(), labels)
+            acc_list.append(accuracy_score(labels, pred))
+            bal_acc_list.append(balanced_accuracy_score(labels, pred))
+        conf_matr.save_plot(self.split, self.fold, self.plots_path)
         acc = statistics.mean(acc_list)
         acc_std_dev = statistics.pstdev(acc_list)
         bal_acc = statistics.mean(bal_acc_list)
@@ -265,8 +292,8 @@ class Trainer:
         ax2.set_ylabel("Testing loss", color='b', fontsize=14)
         plt.savefig(self.plots_path + f"s_{self.split}_f_{self.fold}.jpg", dpi=100)
 
-        _pw.save_pickle(self.plots_path + f"s_{self.split}_f_{self.fold}_train_loss.pickle", train_loss)
-        _pw.save_pickle(self.plots_path + f"s_{self.split}_f_{self.fold}_test_loss.pickle", test_loss)
+        # _pw.save_pickle(self.plots_path + f"s_{self.split}_f_{self.fold}_train_loss.pickle", train_loss)
+        # _pw.save_pickle(self.plots_path + f"s_{self.split}_f_{self.fold}_test_loss.pickle", test_loss)
 
 if __name__ == '__main__':
     trainer = Trainer()

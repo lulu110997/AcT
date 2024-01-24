@@ -25,4 +25,4 @@ def compare_output_arrays():
     array_diff = (pt_array - tf_array)
     print(array_diff)
 
-save_test_array()
+compare_output_arrays()

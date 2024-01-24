@@ -1,6 +1,11 @@
-import sys
-
 import torch
+# Check GPU
+if not torch.cuda.is_available():
+    import warnings
+    warnings.warn("Cannot find GPU")
+    device = "cpu"
+else:
+    device = "cuda:0"
 
 class ActionTransformer(torch.nn.Module):
     """
@@ -55,24 +60,24 @@ class ActionTransformer(torch.nn.Module):
         self.fc2 = torch.nn.Linear(mlp_head_sz, self.num_classes)
 
         # Initialise weights of layers TODO: how is this initialised using keras?
-        torch.nn.init.normal_(self.class_token, std=(2.0/self.d_model)**0.5)  # HeNormal
-        torch.nn.init.xavier_uniform_(self.fc1.weight.data)  # glorot_uniform
-        torch.nn.init.xavier_uniform_(self.fc2.weight.data)
-        torch.nn.init.xavier_uniform_(self.project_higher.weight.data)
-        for name, params in self.transformer.named_parameters():
-            try:
-                if len(params.data.shape) > 1:
-                    torch.nn.init.xavier_uniform_(params.data)
-                elif ('bias' in name) and (('linear' in name) or ('attn' in name)):
-                    torch.nn.init.zeros_(params.data)
-            except:
-                print(name)
+        # torch.nn.init.normal_(self.class_token, std=(2.0/self.d_model)**0.5)  # HeNormal
+        # torch.nn.init.xavier_uniform_(self.fc1.weight.data)  # glorot_uniform
+        # torch.nn.init.xavier_uniform_(self.fc2.weight.data)
+        # torch.nn.init.xavier_uniform_(self.project_higher.weight.data)
+        # for name, params in self.transformer.named_parameters():
+        #     try:
+        #         if len(params.data.shape) > 1:
+        #             torch.nn.init.xavier_uniform_(params.data)
+        #         elif ('bias' in name) and (('linear' in name) or ('attn' in name)):
+        #             torch.nn.init.zeros_(params.data)
+        #     except:
+        #         print(name)
 
     def forward(self, x):
         batch_sz = x.shape[0]
         x = self.project_higher(x)  # Project to higher dim
         x = torch.cat([self.class_token.expand(batch_sz, -1, -1), x], dim=1)  # Concatenate cls
-        positions = torch.arange(start=0, end=self.T+1, step=1).to("cuda:0")  # Positional vectors??
+        positions = torch.arange(start=0, end=self.T+1, step=1).to(device)  # Positional vectors??
         pe = self.position_embedding(positions)  # Feed position vectors to embedding layer??
         x += pe  # Add pos emb to input
         x = self.transformer(x)  # Feed through the transformer

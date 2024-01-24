@@ -25,7 +25,6 @@ from utils.data import load_mpose, load_kinetics, random_flip, random_noise, one
 from utils.tools import CustomSchedule, CosineSchedule
 from utils.tools import Logger
 
-
 # TRAINER CLASS 
 class Trainer:
     def __init__(self, config, logger, split=1, fold=0):
@@ -154,7 +153,7 @@ class Trainer:
     def do_training(self):
         self.get_data()
         self.get_model()
-        raise("no training")
+        # raise("no training")
         self.model.fit(self.ds_train,
                        epochs=self.config['N_EPOCHS'], initial_epoch=0,
                        validation_data=self.ds_val,

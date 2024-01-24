@@ -87,7 +87,6 @@ class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         step = tf.cast(step, dtype='float32')
         arg1 = tf.math.rsqrt(step)
         arg2 = step * (self.warmup_steps ** -1.5)
-
         return tf.cond(step > self.decay_step, lambda: tf.constant(1e-4),
                        lambda: tf.math.rsqrt(self.d_model) * tf.math.minimum(arg1, arg2))
 
