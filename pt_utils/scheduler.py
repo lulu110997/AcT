@@ -11,8 +11,8 @@ class CustomSchedule:
         self.d_model = d_model
         self.n_warmup_steps = n_warmup_steps
         self.n_steps = 0
-        for param_group in self._optimizer.param_groups:
-            self.lr = param_group['lr']
+        # for param_group in self._optimizer.param_groups:
+        #     self.lr = param_group['lr']
 
     def step_and_update_lr(self):
         """"
@@ -42,6 +42,7 @@ class CustomSchedule:
             lr = 1e-4 #* self.lr
         else:
             lr = self._get_lr_scale() #* self.lr
-
+        # print("step:",self.n_steps, "\nlr:",lr,"\n")
         for param_group in self._optimizer.param_groups:
             param_group['lr'] = lr
+            # break

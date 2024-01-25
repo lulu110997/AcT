@@ -1,3 +1,5 @@
+import sys
+
 import torch
 # Check GPU
 if not torch.cuda.is_available():
@@ -51,6 +53,7 @@ class ActionTransformer(torch.nn.Module):
         # )  # tf.keras.layers.Embedding(input_dim=(self.n_tot_patches), output_dim=self.d_model)
         # https://stackoverflow.com/questions/71417255/how-should-the-output-of-my-embedding-layer-look-keras-to-pytorch
         self.position_embedding = torch.nn.Embedding(self.T+1, self.d_model)
+        self.positions = torch.arange(start=0, end=self.T+1, step=1).to(device)  # Positional vectors??
 
         # Transformer encoder
         self.transformer = transformer
@@ -76,9 +79,8 @@ class ActionTransformer(torch.nn.Module):
     def forward(self, x):
         batch_sz = x.shape[0]
         x = self.project_higher(x)  # Project to higher dim
-        x = torch.cat([self.class_token.expand(batch_sz, -1, -1), x], dim=1)  # Concatenate cls
-        positions = torch.arange(start=0, end=self.T+1, step=1).to(device)  # Positional vectors??
-        pe = self.position_embedding(positions)  # Feed position vectors to embedding layer??
+        x = torch.cat([self.class_token.repeat(batch_sz, 1, 1), x], dim=1)  # Concatenate cls TODO: correct?
+        pe = self.position_embedding(self.positions)  # Feed position vectors to embedding layer??
         x += pe  # Add pos emb to input
         x = self.transformer(x)  # Feed through the transformer
         x = x[:, 0, :]  # Obtain the cls vectors

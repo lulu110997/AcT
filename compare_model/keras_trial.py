@@ -100,9 +100,9 @@ def build_act(transformer):
 
 
 # Use GPU
-# gpus = tf.config.experimental.list_physical_devices('GPU')
-# tf.config.experimental.set_memory_growth(gpus[config['GPU']], True)
-# tf.config.experimental.set_visible_devices(gpus[config['GPU']], 'GPU')
+gpus = tf.config.experimental.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(gpus[config['GPU']], True)
+tf.config.experimental.set_visible_devices(gpus[config['GPU']], 'GPU')
 
 # Create the keras model and load weights
 trans = TransformerEncoder(d_model, n_heads, d_ff, dropout, activation, n_layers)
@@ -120,10 +120,11 @@ model.load_weights(config['WEIGHTS'])
 # t_output = model(t_input)
 # print(t_output)
 # np.save(f"tf_output_{model_size}.npy", t_output.numpy())
+# sys.exit()
 
 # print("########## SAVE WEIGHTS IN DICT ##########")
 # weight_dict = save_weights(model)
-# save_pickle(f"keras_weight_dict_{model_size}_1", weight_dict)
+# save_pickle(f"AcT_micro_1_0_{model_size}", weight_dict)
 
 # Print keys of the wieght dict
 # for w in weight_dict.keys():

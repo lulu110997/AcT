@@ -88,7 +88,6 @@ class Trainer:
         self.WEIGHT_DECAY = self.config["WEIGHT_DECAY"]
         self.WARMUP_PERC = self.config["WARMUP_PERC"]
         self.STEP_PERC = self.config["STEP_PERC"]
-        self.LR_MULT = self.config["LR_MULT"]
         self.N_FOLD = self.config["FOLDS"]
         self.N_SPLITS = self.config["SPLITS"]
         # Check GPU
@@ -115,17 +114,16 @@ class Trainer:
         Returns: None
         """
         root = '/home/louis/Data/Fernandez_HAR/AcT_posenet_processed_data/'
-        train_x = torch.tensor(np.load(root + f"X_train_processed_split{self.split}_fold{self.fold}.npy"))
-        train_y = torch.tensor(np.load(root + f"y_train_processed_split{self.split}_fold{self.fold}.npy"))
-        test_x = torch.tensor(np.load(root + f"X_test_processed_split{self.split}_fold{self.fold}.npy"))
-        test_y = torch.tensor(np.load(root + f"y_test_processed_split{self.split}_fold{self.fold}.npy"))
-        val_x = torch.tensor(np.load(root + f"X_val_processed_split{self.split}_fold{self.fold}.npy"))
-        val_y = torch.tensor(np.load(root + f"y_val_processed_split{self.split}_fold{self.fold}.npy"))
+        train_x = torch.tensor(np.load(root + f"X_train_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
+        train_y = torch.tensor(np.load(root + f"y_train_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
+        test_x = torch.tensor(np.load(root + f"X_test_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
+        test_y = torch.tensor(np.load(root + f"y_test_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
+        val_x = torch.tensor(np.load(root + f"X_val_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
+        val_y = torch.tensor(np.load(root + f"y_val_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
         train_dataset = torch.utils.data.TensorDataset(train_x, train_y)
         test_dataset = torch.utils.data.TensorDataset(test_x, test_y)
         val_dataset = torch.utils.data.TensorDataset(val_x, val_y)
-        self.training_loader = torch.utils.data.DataLoader(train_dataset, batch_size=self.config['BATCH_SIZE'],
-                                                           shuffle=True, num_workers=1)
+        self.training_loader = torch.utils.data.DataLoader(train_dataset, batch_size=self.config['BATCH_SIZE'], shuffle=True)
         self.test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=self.config['BATCH_SIZE'])
         self.val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=self.config['BATCH_SIZE'])
 
@@ -142,7 +140,9 @@ class Trainer:
         self.model = ActionTransformer(transformer, self.d_model, self.num_frames, self.num_classes,
                                        self.skel_extractor, self.mlp_head_sz).to(self.DEVICE)
 
-        self.train_steps = np.ceil(float(len(self.training_loader.dataset)) / self.config['BATCH_SIZE'])
+        # TODO: Keras code have train len incl val
+        train_len = len(self.training_loader.dataset) + len(self.val_loader.dataset)
+        self.train_steps = np.ceil(float(train_len) / self.config['BATCH_SIZE'])
 
         # https://stackoverflow.com/questions/69576720/implementing-custom-learning-rate-scheduler-in-pytorch
         # optimizer = tfa.optimizers.AdamW(learning_rate=lr, weight_decay=self.config['WEIGHT_DECAY'])
@@ -163,24 +163,24 @@ class Trainer:
 
 
     def main(self):
-        # Get data, train (uses train/val), eval (uses test)
+        # train: uses train/val, eval: uses test
         for split in range(1, self.N_SPLITS + 1):
-            acc_list = []
-            bal_acc_list = []
             self.logger.save_log(f"----- Start Split {split} at {time.time()} ----\n")
             self.split = split
+            acc_list = []
+            bal_acc_list = []
 
             for fold in range(self.N_FOLD):
                 self.logger.save_log(f"----- Start Fold {fold+1} at {time.time()} ----")
                 self.fold = fold
                 self.get_data()
                 self.get_model()
-                load_weight(self.model, self.weight_dict)
+                load_weight(self.model, self.weight_dict)  # Use the initialised Keras weights
                 weights_path = self.train()
                 acc, bal_acc = self.eval(weights_path)
-                acc_list.append(acc[0])
-                bal_acc_list.append(bal_acc[0])
-                self.logger.save_log(f"Accuracy Test: {acc[0]} <> Balanced Accuracy: {bal_acc[0]}\n")
+                acc_list.append(acc)
+                bal_acc_list.append(bal_acc)
+                self.logger.save_log(f"Accuracy Test: {acc} <> Balanced Accuracy: {bal_acc}\n")
 
             self.logger.save_log(f"---- Split {split} ----")
             self.logger.save_log(f"Accuracy mean: {statistics.mean(acc_list)}")
@@ -195,7 +195,7 @@ class Trainer:
 
         Returns: string | path to the best model for across all epochs
         """
-        max_bal_acc = 0.0
+        max_acc = 0.0
         epoch_loss_train = []
         epoch_loss_test = []
         for epoch in range(self.N_EPOCHS):
@@ -206,35 +206,31 @@ class Trainer:
                 # https://stackoverflow.com/questions/69576720/implementing-custom-learning-rate-scheduler-in-pytorch
                 # https://stackoverflow.com/questions/48001598/why-do-we-need-to-call-zero-grad-in-pytorch
                 self.lr.zero_grad()
-                batch_x = batch_x.to(torch.float32)
-                batch_y = batch_y.to(torch.float32)
                 output = self.model(batch_x.to(self.DEVICE))
-                loss = self.loss_fn(output, torch.argmax(batch_y, dim=1).to(self.DEVICE))
+                loss = self.loss_fn(output, torch.argmax(batch_y.to(self.DEVICE), dim=1))
                 loss.backward()
                 self.lr.step_and_update_lr()
-                train_loss += loss.cpu().detach().item()
-            epoch_loss_train.append(train_loss)
+                train_loss += loss.detach().cpu().item()
+            epoch_loss_train.append(train_loss/len(self.training_loader.dataset))
 
             # Perform test in between epoch
             test_loss = 0
             self.model.eval()
-            bal_acc_list = []
+            acc_list = []
             for batch_x, batch_y in self.val_loader:
-                batch_x = batch_x.to(torch.float32)
-                batch_y = batch_y.to(torch.float32)
                 output = self.model(batch_x.to(self.DEVICE))
-                test_loss += self.loss_fn(output, torch.argmax(batch_y, dim=1).to(self.DEVICE)).cpu().detach().item()
+                test_loss += self.loss_fn(output,
+                                          torch.argmax(batch_y.to(self.DEVICE), dim=1)).detach().cpu().item()
 
                 # Obtain accuracy metrics for test dataset
-                pred = torch.argmax(torch.softmax(output, dim=-1), dim=1)  # Apply softmax here
+                pred = torch.argmax(torch.softmax(output, dim=1), dim=1)  # Apply softmax here
                 labels = torch.argmax(batch_y, dim=1)
-                bal_acc_list.append(accuracy_score(labels.cpu().detach(), pred.cpu().detach()))
-                # bal_acc_list.append(balanced_accuracy_score(labels.cpu().detach(), pred.cpu().detach()))
-            epoch_loss_test.append(test_loss)
-            bal_acc = statistics.mean(bal_acc_list)
-            if bal_acc > max_bal_acc:  # TODO: what metric does keras use to choose best weight?
+                acc_list.append(accuracy_score(labels.cpu().detach(), pred.cpu().detach()))
+            epoch_loss_test.append(test_loss/len(self.val_loader.dataset))
+            curr_acc = statistics.mean(acc_list)
+            if curr_acc > max_acc:  # TODO: what metric does keras use to choose best weight?
                 # Save the weights, split, fold, epoch and batch info
-                max_bal_acc = bal_acc
+                max_acc = curr_acc
                 save_path = os.path.join(self.weights_path, f"s_{self.split}_f{self.fold}_best.pt")
                 torch.save(self.model.state_dict(), save_path)
         self.fold_loss(epoch_loss_train, epoch_loss_test)
@@ -245,31 +241,31 @@ class Trainer:
         Evaluate model on the test dataset
         Args:
             weight_path: string | path to weight
-        Returns: tuple | (accuracy and accuracy std dev) and (balanced accuracy, balanced accuracy std dev)
+        Returns: tuple | (accuracy and balanced accuracy)
         """
-        self.model.load_state_dict(torch.load(weight_path))
+        if not (weight_path is None):
+            self.model.load_state_dict(torch.load(weight_path))
         acc_list = []
         bal_acc_list = []
         conf_matr = _cm(self.num_classes, labels=self.config["LABELS"])
 
         self.model.eval()
         for batch_x, batch_y in self.test_loader:
-            batch_x = batch_x.to(torch.float32)
-            batch_y = batch_y.to(torch.float32)
             output = self.model(batch_x.to(self.DEVICE))
-            prob_dist = torch.softmax(output, dim=-1) # Apply softmax here
-            pred = torch.argmax(prob_dist, dim=1).cpu().detach()
-            labels = torch.argmax(batch_y, dim=1).cpu().detach()
-            conf_matr.update(prob_dist.cpu().detach(), labels)
-            acc_list.append(accuracy_score(labels, pred))
-            bal_acc_list.append(balanced_accuracy_score(labels, pred))
+            labels = torch.argmax(batch_y, dim=1).detach().cpu()
+
+            prob_dist = torch.softmax(output, dim=1)  # Apply softmax here
+            conf_matr.update(prob_dist.detach().cpu(), labels)  # Update confusion matrix
+            pred = torch.argmax(prob_dist, dim=1).detach().cpu()  # Obtain prediction as class indices
+            acc_list.append(accuracy_score(labels, pred))  # Calculate accuracy
+            bal_acc_list.append(balanced_accuracy_score(labels, pred))  # Calculate balanced accuracy
+
+        # Save/calculate metrics
         conf_matr.save_plot(self.split, self.fold, self.plots_path)
         acc = statistics.mean(acc_list)
-        acc_std_dev = statistics.pstdev(acc_list)
         bal_acc = statistics.mean(bal_acc_list)
-        bal_acc_std_dev = statistics.pstdev(bal_acc_list)
 
-        return (acc, acc_std_dev), (bal_acc, bal_acc_std_dev)
+        return (acc, bal_acc)
 
     def fold_loss(self, train_loss, test_loss):
         """
@@ -284,12 +280,10 @@ class Trainer:
         fig, ax1 = plt.subplots()
         fig.suptitle(f"Loss for split {self.split} fold {self.fold}")
         fig.set_size_inches(10.8, 7.2)
-        ax2 = ax1.twinx()
-        ax1.plot(x, train_loss, color='r')
-        ax1.set_ylabel("Training loss", color='r', fontsize=14)
-        test_loss.reverse()
-        ax2.plot(x, test_loss, color='b')
-        ax2.set_ylabel("Testing loss", color='b', fontsize=14)
+        ax1.plot(x, train_loss, color='r', label='training')
+        ax1.set_ylabel("Loss", color='r', fontsize=14)
+        ax1.plot(x, test_loss, color='b', label='testing', alpha=0.8)
+        plt.legend()
         plt.savefig(self.plots_path + f"s_{self.split}_f_{self.fold}.jpg", dpi=100)
 
         # _pw.save_pickle(self.plots_path + f"s_{self.split}_f_{self.fold}_train_loss.pickle", train_loss)
@@ -298,3 +292,7 @@ class Trainer:
 if __name__ == '__main__':
     trainer = Trainer()
     trainer.main()
+    #TODO: training and testing accuracy of keras model and compare with pytorch
+    #TODO: check pytorch losses why not in same scale
+    #TODO: training and testing losses should be the same scale
+    #TODO: feed skeleton data from IKEA-ASM

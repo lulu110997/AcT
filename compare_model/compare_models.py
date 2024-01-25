@@ -23,6 +23,10 @@ def compare_output_arrays():
     pt_array = np.load(f"pt_output_{model_size}.npy")
     tf_array = np.load(f"tf_output_{model_size}.npy")
     array_diff = (pt_array - tf_array)
-    print(array_diff)
+    print("array_diff:\n", array_diff)
+    if (np.abs(array_diff)>0.0001).any():
+        print("pt:\n", pt_array)
+        print("tf:\n", tf_array)
+        raise Exception("Not equal")
 
 compare_output_arrays()
