@@ -3,7 +3,7 @@ import sys
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Stops NUMA error
 from utils.tools import read_yaml
-from pt_utils.transformer_model import ActionTransformer
+from pt_utils.transformer_model import *
 from pickle_wrapper import *
 
 import numpy as np
@@ -63,22 +63,23 @@ def load_weight(model, weight_dict):
 # Create the pt model
 # n_heads doesn't impact learnable params??
 # https://discuss.pytorch.org/t/what-does-increasing-number-of-heads-do-in-the-multi-head-attention/101294/4
-encoder_layer = torch.nn.TransformerEncoderLayer(d_model=d_model, nhead=n_heads, dim_feedforward=d_ff, dropout=dropout,
-                                           activation="gelu", layer_norm_eps=1e-6, batch_first=True)
-trans_nn = torch.nn.TransformerEncoder(encoder_layer, n_layers)
-model = ActionTransformer(trans_nn, d_model, num_frames, num_classes, skel_extractor, mlp_head_sz).to(device)
+
+transformer = TransformerEncoder(d_model=d_model, num_heads=n_heads, d_ff=d_ff, dropout=dropout, n_layers=n_layers)
+model = ActionTransformer(transformer, d_model, num_frames, num_classes, skel_extractor, mlp_head_sz).to(device)
 
 # Dummy input which have the same shape as the expected single vector output from openpose (1, 30, 52)
 # Ensures we have set up the starting layer(s) of the AcT correctly
 inputs = torch.ones(1, config[config['DATASET']]['FRAMES'] // config['SUBSAMPLE'],
                     config[config['DATASET']]['KEYPOINTS'] * config['CHANNELS']).to(device)
 model(inputs)
-# Count number of trainable parameters
-# print(count_parameters_pt(model))
+
+# Count number of trainable parameters. Should be 227156 for micro
+# print(count_parameters_pt(model)); sys.exit()
 
 # Load keras weights OR check name of weights and their shape
-weight_dict = open_pickle(f"keras_weight_dict_{model_size}.pickle")
-load_weight(model, weight_dict)
+# weight_dict = open_pickle(f"../pt_utils/AcT_1_0_{model_size}.pickle")  # pretrained weight
+# weight_dict = open_pickle(f"../pt_utils/keras_{model_size}_init.pickle")  # initialised weight
+# load_weight(model, weight_dict)
 
 # Load dummy input and save output as a numpy array
 # np_input = np.load("test_array.npy")

@@ -1,6 +1,7 @@
 import os
 import sys
 
+from keras.utils.layer_utils import count_params # counting trainable model params
 import numpy as np
 import h52pt
 
@@ -33,9 +34,7 @@ T_WPL = 16
 
 def save_weights(model):
     weight_dict = {}
-    count_dense = 0
-    count_mha = 0
-    count_norm = 0
+
     for layer in model.layers:
         if (not layer.trainable) or ('input' in layer.name):
             continue
@@ -45,11 +44,11 @@ def save_weights(model):
         if "transformer_encoder" in layer.name:
             for i in range(0, n_layers * T_WPL, 16):
                 tl_weights = layer.weights[i:i + T_WPL]  # Weights of each layer
-                h52pt.weight_x(count_mha, weight_dict, tl_weights, True)
+                h52pt.weight_x(n_layers, weight_dict, tl_weights, True)
         else:
 
             for w in layer.weights:
-                h52pt.weight_x(count_mha, weight_dict, w)
+                h52pt.weight_x(n_layers, weight_dict, w)
                 # print(f"{w.name} {w.shape}")
                 # print(np.swapaxes(w.numpy(), 0, 1).shape)
 
@@ -107,12 +106,18 @@ tf.config.experimental.set_visible_devices(gpus[config['GPU']], 'GPU')
 # Create the keras model and load weights
 trans = TransformerEncoder(d_model, n_heads, d_ff, dropout, activation, n_layers)
 model = build_act(trans)
-model.load_weights(config['WEIGHTS'])
+# model.load_weights(config['WEIGHTS'])
 
 # Count trainable params
 # trainable_count = count_params(model.trainable_weights)
-# print(trainable_count) 227156
+# print(trainable_count) # 227156
 # print(model.summary())
+
+# check name of weights and their shape
+# names = [weight.name for layer in model.layers for weight in layer.weights]
+# weights = model.get_weights()
+# for name, weight in zip(names, weights):
+#     print(name, weight.shape)
 
 # Load dummy input and save output as a numpy array
 # np_input = np.load("test_array.npy")
@@ -120,13 +125,15 @@ model.load_weights(config['WEIGHTS'])
 # t_output = model(t_input)
 # print(t_output)
 # np.save(f"tf_output_{model_size}.npy", t_output.numpy())
-# sys.exit()
 
 # print("########## SAVE WEIGHTS IN DICT ##########")
 # weight_dict = save_weights(model)
-# save_pickle(f"AcT_micro_1_0_{model_size}", weight_dict)
+# save_pickle(f"AcT_1_0_{model_size}", weight_dict)  # Save pretrained weight. Double check split and fold
+# save_pickle(f"../pt_utils/keras_{model_size}_init", weight_dict)  # Save init weight. Turn off weight loading
 
-# Print keys of the wieght dict
+# sys.exit()
+
+# Print keys of the weight dict
 # for w in weight_dict.keys():
 #     print(w, weight_dict[w].shape)
 
