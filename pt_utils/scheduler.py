@@ -42,7 +42,7 @@ class CustomSchedule:
             lr = 1e-4 #* self.lr
         else:
             lr = self._get_lr_scale() #* self.lr
-        # print("step:",self.n_steps, "\nlr:",lr,"\n")
+
         for param_group in self._optimizer.param_groups:
             param_group['lr'] = lr
             # break

@@ -1,10 +1,15 @@
 # Imports
+"""
+IMPORTANT NOTE
+TODO: ln 985 in activation.py for pytorch model (class MultiheadAttention(Module) was modified so that separate weights
+are used for projecting the qkv matrices
+"""
 import sys
 import warnings
 warnings.filterwarnings("ignore", message="y_pred contains classes not in y_true")
 warnings.filterwarnings("ignore", message="enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.self_attn.num_heads is odd")
 
-from transformer_model import ActionTransformer
+from transformer_model import *
 from scheduler import CustomSchedule
 from datetime import datetime
 from sklearn.metrics import balanced_accuracy_score, accuracy_score
@@ -133,14 +138,12 @@ class Trainer:
         Returns: None
         """
         # Build network
-        encoder_layer = torch.nn.TransformerEncoderLayer(d_model=self.d_model, nhead=self.n_heads,
-                                                         dim_feedforward=self.d_ff, dropout=self.dropout,
-                                                         activation="gelu", layer_norm_eps=1e-6, batch_first=True)
-        transformer = torch.nn.TransformerEncoder(encoder_layer, self.n_layers)
+        transformer = TransformerEncoder(d_model=self.d_model, num_heads=self.n_heads,
+                                         d_ff=self.d_ff, dropout=self.dropout, n_layers=self.n_layers).to(self.DEVICE)
         self.model = ActionTransformer(transformer, self.d_model, self.num_frames, self.num_classes,
                                        self.skel_extractor, self.mlp_head_sz).to(self.DEVICE)
 
-        # TODO: Keras code have train len incl val
+        # Keras code have train len incl val
         train_len = len(self.training_loader.dataset) + len(self.val_loader.dataset)
         self.train_steps = np.ceil(float(train_len) / self.config['BATCH_SIZE'])
 
@@ -152,14 +155,13 @@ class Trainer:
                                  n_warmup_steps=self.train_steps * self.config['N_EPOCHS'] * self.config['WARMUP_PERC'],
                                  decay_step=self.train_steps * self.config['N_EPOCHS'] * self.config['STEP_PERC'])
 
-        # loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1)
         # https://datascience.stackexchange.com/questions/73093/what-does-from-logits-true-do-in-sparsecategoricalcrossentropy-loss-function
         # Might need to implement my own loss to copy keras's categorical cross entropy loss
         # https://discuss.pytorch.org/t/cross-entropy-with-one-hot-targets/13580/7
         # https://discuss.pytorch.org/t/categorical-cross-entropy-loss-function-equivalent-in-pytorch/85165/7
         # or not?
         # https://discuss.pytorch.org/t/cant-replicate-keras-categoricalcrossentropy-with-pytorch/146747
-        self.loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1, reduction='mean')  # TODO: correct?
+        self.loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1, reduction='mean')
 
 
     def main(self):
@@ -175,7 +177,7 @@ class Trainer:
                 self.fold = fold
                 self.get_data()
                 self.get_model()
-                load_weight(self.model, self.weight_dict)  # Use the initialised Keras weights
+                # load_weight(self.model, self.weight_dict)  # Use the initialised Keras weights
                 weights_path = self.train()
                 acc, bal_acc = self.eval(weights_path)
                 acc_list.append(acc)
@@ -228,7 +230,7 @@ class Trainer:
                 acc_list.append(accuracy_score(labels.cpu().detach(), pred.cpu().detach()))
             epoch_loss_test.append(test_loss/len(self.val_loader.dataset))
             curr_acc = statistics.mean(acc_list)
-            if curr_acc > max_acc:  # TODO: what metric does keras use to choose best weight?
+            if curr_acc > max_acc:  # AcT Keras used val accuracy to choose best weight
                 # Save the weights, split, fold, epoch and batch info
                 max_acc = curr_acc
                 save_path = os.path.join(self.weights_path, f"s_{self.split}_f{self.fold}_best.pt")
