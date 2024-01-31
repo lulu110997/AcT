@@ -11,6 +11,7 @@ from datetime import datetime
 from sklearn.metrics import balanced_accuracy_score, accuracy_score
 from utils.tools import Logger
 from confusion_matrix import ConfusionMatrix as _cm
+from tqdm import tqdm
 
 import pickle_wrapper as _pw
 import matplotlib.pyplot as plt
@@ -18,7 +19,6 @@ import yaml
 import numpy as np
 import torch.utils.data
 import os
-import time
 import statistics
 
 def check_dir(path):
@@ -92,6 +92,7 @@ class Trainer:
         self.STEP_PERC = config["STEP_PERC"]
         self.N_FOLD = config["FOLDS"]
         self.N_SPLITS = config["SPLITS"]
+        self.LABELS = config["LABELS"]
         # Check GPU
         if not torch.cuda.is_available():
             warnings.warn("Cannot find GPU")
@@ -154,18 +155,18 @@ class Trainer:
 
     def main(self):
         # train: uses train/val, eval: uses test
-        for split in range(1, self.N_SPLITS + 1):
-            self.logger.save_log(f"----- Start Split {split} at {time.time()} ----\n")
+        for split in tqdm(range(1, self.N_SPLITS + 1)):
+            self.logger.save_log(f"----- Start Split {split} ----\n")
             self.split = split
             acc_list = []
             bal_acc_list = []
 
-            for fold in range(self.N_FOLD):
-                self.logger.save_log(f"----- Start Fold {fold+1} at {time.time()} ----")
+            for fold in tqdm(range(self.N_FOLD), leave=False):
+                self.logger.save_log(f"----- Start Fold {fold+1} ----")
                 self.fold = fold
                 self.get_data()
                 self.get_model()
-                load_weight(self.model, self.weight_dict)  # Use the initialised Keras weights
+                # load_weight(self.model, self.weight_dict)  # Use the initialised Keras weights
                 weight_path = self.train()
                 acc, bal_acc = self.eval(weight_path)
                 acc_list.append(acc)
@@ -238,7 +239,7 @@ class Trainer:
             self.model.load_state_dict(torch.load(weight_path))
         acc_list = []
         bal_acc_list = []
-        conf_matr = _cm(self.num_classes, labels=self.config["LABELS"])
+        conf_matr = _cm(self.num_classes, labels=self.LABELS)
 
         self.model.eval()
         for batch_x, batch_y in self.test_loader:
