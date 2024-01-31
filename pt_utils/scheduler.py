@@ -2,6 +2,7 @@ class CustomSchedule:
     """
     A simple wrapper class for learning rate scheduling
     from git@github.com:jadore801120/attention-is-all-you-need-pytorch.git
+    https://stackoverflow.com/questions/69576720/implementing-custom-learning-rate-scheduler-in-pytorch
     https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/Optim.py
     """
 
@@ -11,8 +12,6 @@ class CustomSchedule:
         self.d_model = d_model
         self.n_warmup_steps = n_warmup_steps
         self.n_steps = 0
-        # for param_group in self._optimizer.param_groups:
-        #     self.lr = param_group['lr']
 
     def step_and_update_lr(self):
         """"
@@ -30,7 +29,9 @@ class CustomSchedule:
     def _get_lr_scale(self):
         d_model = self.d_model
         n_steps, n_warmup_steps = self.n_steps, self.n_warmup_steps
-        return (d_model ** -0.5) * min(n_steps ** (-0.5), n_steps * (n_warmup_steps ** (-1.5)))
+        arg1 = n_steps ** (-0.5)
+        arg2 = n_steps * (n_warmup_steps ** -1.5)
+        return (d_model ** -0.5) * min(arg1, arg2)
 
     def _update_learning_rate(self):
         """
@@ -39,10 +40,9 @@ class CustomSchedule:
 
         self.n_steps += 1
         if self.n_steps > self.decay_step:
-            lr = 1e-4 #* self.lr
+            lr = 1e-4
         else:
-            lr = self._get_lr_scale() #* self.lr
+            lr = self._get_lr_scale()
 
         for param_group in self._optimizer.param_groups:
             param_group['lr'] = lr
-            # break

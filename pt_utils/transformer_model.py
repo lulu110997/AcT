@@ -1,3 +1,8 @@
+'''
+https://discuss.pytorch.org/t/suboptimal-convergence-when-compared-with-tensorflow-model/5099/46
+https://discuss.pytorch.org/t/keras-vs-torch-implementation-same-results-for-sgd-different-results-for-adam/119113
+https://discuss.pytorch.org/t/adam-optimizer-doesnt-converge-while-sgd-works-fine/25338/7
+'''
 import sys
 
 import torch
@@ -45,7 +50,7 @@ class ActionTransformer(torch.nn.Module):
         # https://stackoverflow.com/questions/71417255/how-should-the-output-of-my-embedding-layer-look-keras-to-pytorch
 
         # cls token to concatenate to the projected input
-        self.class_token = torch.nn.Parameter(torch.randn(1, 1, self.d_model), requires_grad=True)
+        self.class_token = torch.nn.Parameter(torch.randn(1, 1, self.d_model))
 
         # Learnable vectors to be added to the projected input
         self.position_embedding = torch.nn.Embedding(self.T+1, self.d_model)
@@ -64,7 +69,7 @@ class ActionTransformer(torch.nn.Module):
     def forward(self, x):
         batch_sz = x.shape[0]
         x = self.project_higher(x)  # Project to higher dim
-        x = torch.cat([self.class_token.expand(batch_sz, -1, -1), x], dim=1)  # Concatenate cls TODO: correct? might also need to use torch.repeat
+        x = torch.cat([self.class_token.repeat(batch_sz, 1, 1), x], dim=1)  # Concatenate cls TODO: correct? might also need to use torch.repeat instead of expand
         pe = self.position_embedding(self.positions)  # Feed position vectors to embedding layer??
         x += pe  # Add pos emb to input
         x = self.transformer(x)  # Feed through the transformer
@@ -78,17 +83,20 @@ class ActionTransformer(torch.nn.Module):
         Resets the parameters of the model to match how they are initialised in keras
         """
         torch.nn.init.normal_(self.class_token, std=(2.0/(self.class_token.data.shape[-1])**0.5))  # HeNormal
-        torch.nn.init.uniform_(self.position_embedding.weight.data, a=-0.05, b=0.05)  # Random uniform initializer
+        torch.nn.init.uniform_(self.position_embedding.weight.data)  # Random uniform initializer
 
         for name, params in self.named_parameters():
-            # print(name, params.data.shape)
-
             # class token and embedding layer have been initalised above
             # layer norms are initialised correctly as by default weights are init as ones and bias as zeros
             if ('weight' in name) and (not ('norm' in name)) and (not ('position_embedding' in name)):
                 torch.nn.init.xavier_uniform_(params.data)  # glorot_uniform used to initalise weights
+
             elif ('bias' in name) and (not ('norm' in name)):
                 torch.nn.init.zeros_(params.data)  # biases are initialised to zero
+
+
+        #     print(name, params.data.detach().cpu().numpy().shape)
+        # sys.exit()
 
 class MultiHeadAttention(torch.nn.Module):
     def __init__(self, d_model, num_heads, depth):
@@ -116,7 +124,7 @@ class MultiHeadAttention(torch.nn.Module):
     def forward(self, v, k, q):
         # batch_size = tf.shape(q)[0]
         batch_size = q.size(dim=0)
-        assert q.size(dim=2) == self.d_model
+        # assert q.size(dim=2) == self.d_model
 
         q = self.wq(q)  # (batch_size, seq_len, d_model)
         k = self.wk(k)  # (batch_size, seq_len, d_model)
@@ -128,6 +136,7 @@ class MultiHeadAttention(torch.nn.Module):
 
         # scaled_attention.shape == (batch_size, num_heads, seq_len_q, depth)
         # attention_weights.shape == (batch_size, num_heads, seq_len_q, seq_len_k)
+        # assert k.size(dim=3) == self.depth
         scaled_attention, attention_weights = scaled_dot_product_attention(q, k, v)
 
         # scaled_attention = tf.transpose(scaled_attention,
@@ -135,6 +144,7 @@ class MultiHeadAttention(torch.nn.Module):
         scaled_attention = torch.transpose(scaled_attention, dim0=1, dim1=2)  # (batch_size, seq_len_q, num_heads, depth)
 
         concat_attention = torch.reshape(scaled_attention, (batch_size, -1, self.d_model))  # (batch_size, seq_len_q, d_model)
+        # assert concat_attention.shape[1] == 31
 
         output = self.dense(concat_attention)  # (batch_size, seq_len_q, d_model)
 
@@ -159,7 +169,6 @@ class TransformerEncoderLayer(torch.nn.Module):
         self.ffn1 = torch.nn.Linear(d_model, d_ff)  # (batch_size, seq_len, dff)
         self.ffn2 = torch.nn.Linear(d_ff, d_model)  # (batch_size, seq_len, d_model)
 
-        # TODO: check d_model is correct input for normalized_shape
         self.layernorm1 = torch.nn.LayerNorm(d_model, eps=1e-6)
         self.layernorm2 = torch.nn.LayerNorm(d_model, eps=1e-6)
 
@@ -210,11 +219,11 @@ def scaled_dot_product_attention(q, k, v):
     matmul_qk = torch.matmul(q, torch.transpose(k, dim0=2, dim1=3))  # (..., seq_len_q, seq_len_k)
 
     # scale matmul_qk
-    dk = torch.tensor(k.size(dim=3), dtype=torch.int8)  # dimension of key (ie how many key values is used) for one head
+    dk = torch.tensor(k.size(dim=3), dtype=torch.int8)  # dimension of key (ie how many key values is used) for each head
     dk_sqrt = torch.sqrt(dk)
     scaled_attention_logits = torch.divide(matmul_qk, dk_sqrt)
 
-    # softmax is normalized on the last axis (seq_len_k) so that the scores add up to 1
+    # softmax is applied on the last axis (seq_len_k) so that the scores add up to 1
     # this is normalising the matrix such that each 'row' adds up to 1
     attention_weights = torch.softmax(scaled_attention_logits, dim=-1)  # (..., seq_len_q, seq_len_k)
 
