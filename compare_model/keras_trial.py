@@ -31,6 +31,11 @@ NUM_DENSE = 6
 NUM_NORM = 2
 T_WPL = 16
 
+# Use GPU
+gpus = tf.config.experimental.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(gpus[config['GPU']], True)
+tf.config.experimental.set_visible_devices(gpus[config['GPU']], 'GPU')
+
 
 def save_weights(model):
     weight_dict = {}
@@ -98,18 +103,13 @@ def build_act(transformer):
     return tf.keras.models.Model(inputs, outputs)
 
 
-# Use GPU
-gpus = tf.config.experimental.list_physical_devices('GPU')
-tf.config.experimental.set_memory_growth(gpus[config['GPU']], True)
-tf.config.experimental.set_visible_devices(gpus[config['GPU']], 'GPU')
-
 # Create the keras model and load weights
 trans = TransformerEncoder(d_model, n_heads, d_ff, dropout, activation, n_layers)
 model = build_act(trans)
-# model.load_weights(config['WEIGHTS'])
+model.load_weights(config['WEIGHTS'])
 
 # Count trainable params
-# trainable_count = count_params(model.trainable_weights)
+trainable_count = count_params(model.trainable_weights)
 # print(trainable_count) # 227156
 # print(model.summary())
 
@@ -145,8 +145,16 @@ test_dataset = test_dataset.batch(512)
 loss_fn = tf.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1)
 for bx, by in test_dataset:
     # print(bx[0,:10,:10])
-    label = by
-    output = model.predict(bx)
-    loss = loss_fn(label, output)
-    print(loss)
+    # label = by
+    # output = model.predict(bx)
+    # print(bx.shape, output.shape)
+    # loss = loss_fn(label, output)
+    # print(loss)
+
+    with tf.GradientTape() as tape:
+        logits = model(bx, training=True)  # Logits for this minibatch
+        # Compute the loss value for this minibatch.
+        loss = loss_fn(by, logits)
+        print(loss)
+
     sys.exit()

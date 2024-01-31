@@ -77,9 +77,9 @@ model(inputs)
 # print(count_parameters_pt(model)); sys.exit()
 
 # Load keras weights OR check name of weights and their shape
-# weight_dict = open_pickle(f"../pt_utils/AcT_1_0_{model_size}.pickle")  # pretrained weight
+weight_dict = open_pickle(f"../pt_utils/AcT_1_0_{model_size}.pickle")  # pretrained weight
 # weight_dict = open_pickle(f"../pt_utils/keras_{model_size}_init.pickle")  # initialised weight
-# load_weight(model, weight_dict)
+load_weight(model, weight_dict)
 
 # Load dummy input and save output as a numpy array
 # np_input = np.load("test_array.npy")
@@ -110,15 +110,15 @@ root = '/home/louis/Data/Fernandez_HAR/AcT_posenet_processed_data/'
 test_x = torch.tensor(np.load(root + f"X_test_processed_split{1}_fold{1}.npy"))
 test_y = torch.tensor(np.load(root + f"y_test_processed_split{1}_fold{1}.npy"))
 test_dataset = torch.utils.data.TensorDataset(test_x, test_y)
-test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=512, shuffle=False, drop_last=True)
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=512, shuffle=False)
 loss_fn = torch.nn.CrossEntropyLoss(label_smoothing=0.1, reduction='mean')
 
-model.eval()
+# model.eval()
 for bx, by in test_loader:
-    # print(bx[0,:10,:10])
     label = torch.argmax(by, dim=1).to(device)
     output = model(bx.to(torch.float).to(device))
     # print(output.shape, label.shape)
+    print(bx.shape, output.shape, label.shape)
     loss = loss_fn(output, label)
     print(loss)
     sys.exit()
