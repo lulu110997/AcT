@@ -83,7 +83,7 @@ class ActionTransformer(torch.nn.Module):
         Resets the parameters of the model to match how they are initialised in keras
         """
         torch.nn.init.normal_(self.class_token, std=(2.0/(self.class_token.data.shape[-1])**0.5))  # HeNormal
-        torch.nn.init.uniform_(self.position_embedding.weight.data)  # Random uniform initializer
+        torch.nn.init.uniform_(self.position_embedding.weight.data, a=-0.05, b=0.05)  # Random uniform initializer
 
         for name, params in self.named_parameters():
             # class token and embedding layer have been initalised above

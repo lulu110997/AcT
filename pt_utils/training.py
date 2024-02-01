@@ -117,12 +117,12 @@ class Trainer:
         Returns: None
         """
         root = '/home/louis/Data/Fernandez_HAR/AcT_posenet_processed_data/'
-        train_x = torch.tensor(np.load(root + f"X_train_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
-        train_y = torch.tensor(np.load(root + f"y_train_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
-        test_x = torch.tensor(np.load(root + f"X_test_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
-        test_y = torch.tensor(np.load(root + f"y_test_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
-        val_x = torch.tensor(np.load(root + f"X_val_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
-        val_y = torch.tensor(np.load(root + f"y_val_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
+        train_x = torch.from_numpy(np.load(root + f"X_train_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
+        train_y = torch.from_numpy(np.load(root + f"y_train_processed_split{self.split}_fold{self.fold}.npy")).to(torch.long)
+        test_x = torch.from_numpy(np.load(root + f"X_test_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
+        test_y = torch.from_numpy(np.load(root + f"y_test_processed_split{self.split}_fold{self.fold}.npy")).to(torch.long)
+        val_x = torch.from_numpy(np.load(root + f"X_val_processed_split{self.split}_fold{self.fold}.npy")).to(torch.float32)
+        val_y = torch.from_numpy(np.load(root + f"y_val_processed_split{self.split}_fold{self.fold}.npy")).to(torch.long)
         train_dataset = torch.utils.data.TensorDataset(train_x, train_y)
         test_dataset = torch.utils.data.TensorDataset(test_x, test_y)
         val_dataset = torch.utils.data.TensorDataset(val_x, val_y)
@@ -145,7 +145,7 @@ class Trainer:
         train_len = len(self.training_loader.dataset) + len(self.val_loader.dataset)
         self.train_steps = np.ceil(float(train_len) / self.BATCH_SIZE)
 
-        optimiser = torch.optim.Adam(self.model.parameters(), weight_decay=self.WEIGHT_DECAY, eps=1e-07)
+        optimiser = torch.optim.AdamW(self.model.parameters(), weight_decay=self.WEIGHT_DECAY, eps=1e-07)
         self.lr = CustomSchedule(d_model=self.d_model, optimizer=optimiser,
                                  n_warmup_steps=self.train_steps * self.N_EPOCHS * self.WARMUP_PERC,
                                  decay_step=self.train_steps * self.N_EPOCHS * self.STEP_PERC)
@@ -166,7 +166,8 @@ class Trainer:
                 self.fold = fold
                 self.get_data()
                 self.get_model()
-                # load_weight(self.model, self.weight_dict)  # Use the initialised Keras weights
+                if (fold % 2) == 0:
+                    load_weight(self.model, self.weight_dict)  # Use the initialised Keras weights
                 weight_path = self.train()
                 acc, bal_acc = self.eval(weight_path)
                 acc_list.append(acc)
