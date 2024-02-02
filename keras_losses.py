@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import os
 import pickle_wrapper as _pw
 k = "/home/louis/Data/Fernandez_HAR/AcT_keras_results/micro_trained_with_losses/losses/"
-pt = "/home/louis/Data/Fernandez_HAR/AcT_pt/micro_2024_01_31_15_09_44/plots"
-for split in range(1, 2):
-    for fold in range(2):
+pt = "/home/louis/Data/Fernandez_HAR/AcT_pt/trying_to_reach_keras_results/micro_with_pret/plots"
+for split in range(1, 4):
+    for fold in range(10):
         k_training_loss = f"training_loss_s{split}_f{fold}_micro.pickle"
         k_validation_loss = f"validation_loss_s{split}_f{fold}_micro.pickle"
         k_tl = _pw.open_pickle(os.path.join(k, k_training_loss))
